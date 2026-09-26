@@ -1,5 +1,5 @@
 (function () {
-  var THEMES = [['light', 'Light'], ['dark', 'Dark'], ['transparent', 'Transparent'], ['custom', 'Custom']];
+  var THEMES = [['light', 'Light'], ['dark', 'Dark'], ['aurora', 'Aurora'], ['transparent', 'Transparent'], ['custom', 'Custom']];
 
   var HOURS = [];
   for (var hr = 0; hr < 24; hr++) {
@@ -21,9 +21,9 @@
       id: 'clock',
       group: 'essentials',
       name: 'Clock',
-      desc: 'Analog or digital, 12 or 24 hours.',
+      desc: 'Six faces: classic hands, digital, split dial, LCD segments, Roman numerals or a wavy disc.',
       options: [
-        { key: 'style', label: 'Style', type: 'seg', def: 'analog', choices: [['analog', 'Analog'], ['digital', 'Digital']] },
+        { key: 'style', label: 'Face', type: 'select', def: 'analog', choices: [['analog', 'Classic'], ['digital', 'Digital'], ['split', 'Split dial'], ['lcd', 'LCD'], ['roman', 'Roman'], ['wavy', 'Wavy']] },
         FORMAT,
         { key: 'seconds', label: 'Seconds', type: 'switch', def: true }
       ]
@@ -34,6 +34,7 @@
       name: 'Calendar',
       desc: 'This month, with today highlighted.',
       options: [
+        { key: 'style', label: 'Style', type: 'seg', def: 'grid', choices: [['grid', 'Numbers'], ['dots', 'Dots']] },
         { key: 'weekStart', label: 'Week starts on', type: 'seg', def: 'monday', choices: [['monday', 'Monday'], ['sunday', 'Sunday']] }
       ]
     },
@@ -41,14 +42,15 @@
       id: 'weather',
       group: 'essentials',
       name: 'Weather',
-      desc: 'Current weather, today\'s range and a 5-day forecast in the focused view.',
+      desc: 'Current weather, today\'s range and a 5-day forecast in the focused view. Bold takes its colors from the weather.',
       options: [
+        { key: 'style', label: 'Style', type: 'seg', def: 'classic', choices: [['classic', 'Classic'], ['bold', 'Bold'], ['card', 'Card']] },
         { key: 'location', label: 'Location', type: 'seg', def: 'ip', choices: [['ip', 'Automatic'], ['fixed', 'Choose a city']] },
         { key: 'place', type: 'place', showIf: { location: 'fixed' } },
         { key: 'tempUnit', label: 'Temperature', type: 'seg', def: 'celsius', choices: [['celsius', '°C'], ['fahrenheit', '°F']] },
         { key: 'windUnit', label: 'Wind', type: 'select', def: 'kmh', choices: [['kmh', 'km/h'], ['mph', 'mph'], ['ms', 'm/s'], ['kn', 'knots']] }
       ],
-      extra: { lat: 48.8566, lon: 2.3522, city: 'Paris' }
+      extra: { lat: 48.8566, lon: 2.3522, city: 'Paris', country: 'France' }
     },
     {
       id: 'battery',
@@ -58,6 +60,17 @@
       options: [
         { key: 'lowAt', label: 'Low warning at', type: 'select', def: 20, choices: [[10, '10%'], [15, '15%'], [20, '20%'], [30, '30%']] },
         { key: 'history', label: 'Chart shows', type: 'seg', def: 12, choices: [[6, '6 h'], [12, '12 h'], [24, '24 h']] }
+      ]
+    },
+    {
+      id: 'devices',
+      group: 'device',
+      name: 'Devices',
+      desc: 'Battery pills for the handheld and the controllers connected to it. Controllers appear after you press one of their buttons.',
+      options: [
+        { key: 'fill', label: 'Fill color', type: 'seg', def: 'yellow', choices: [['yellow', 'Yellow'], ['green', 'Green'], ['theme', 'Theme']] },
+        { key: 'controllers', label: 'Show controllers', type: 'switch', def: true },
+        { key: 'builtIn', label: 'Include built-in controls', type: 'switch', def: false, showIf: { controllers: true } }
       ]
     },
     {
@@ -211,6 +224,7 @@
       delete cfg.lat;
       delete cfg.lon;
       delete cfg.city;
+      delete cfg.country;
     }
     return cfg;
   }
@@ -398,6 +412,7 @@
               s.lat = Math.round(p.latitude * 10000) / 10000;
               s.lon = Math.round(p.longitude * 10000) / 10000;
               s.city = p.name;
+              s.country = p.country || '';
               results.innerHTML = '';
               input.value = '';
               showCurrent();

@@ -4,10 +4,12 @@ Web widgets and mini games for the iiSU launcher, with a configurator page to se
 
 | Group | Widgets |
 |---|---|
-| Essentials | Clock, Calendar, Weather |
-| Device | Battery (level, charging, time left from measured drain, history chart), Hourly chime |
+| Essentials | Clock (classic, digital, split dial, LCD, Roman, wavy), Calendar (numbers or dots), Weather (classic, bold, card) |
+| Device | Battery (level, charging, time left from measured drain, history chart), Devices (battery pills for the handheld and connected controllers), Hourly chime |
 | Decor | Scene (layered landscape that follows the time of day and the handheld's tilt) |
 | Games | Snake, 2048 |
+
+Themes: light, dark, aurora (gradient with film grain), transparent and custom colors.
 
 Every widget can use the **tilt effect** (content moves slightly with the motion sensor), set once for all widgets.
 
@@ -65,6 +67,7 @@ To add another font: put its file in `fonts/` (only if its license allows redist
 - Touch reaches the widget whether it is focused or not. The controller is readable through the Gamepad API. Keyboard events do not arrive.
 - Geolocation is denied: automatic weather uses IP location (GeoJS).
 - Sound, vibration, motion sensor and battery level are available. Battery time remaining is not.
+- Bluetooth devices: a web view cannot list paired Bluetooth devices or read their battery (no Web Bluetooth in Android WebView). The Devices widget shows the handheld's battery and the controllers the Gamepad API reports, without their battery level.
 - The widget is 198×198 as a tile and fills most of the screen when focused. Games use this to know when they can take the controller: on the tile, the same buttons move around the iiSU menu.
 
 ## Not tested on the handheld yet

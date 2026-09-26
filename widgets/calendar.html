@@ -104,6 +104,86 @@
       justify-content: center;
     }
   }
+
+  /* ---------- Dots style ---------- */
+  #dots-head {
+    display: none;
+    align-items: center;
+    gap: 4cqmin;
+  }
+
+  #dh-num {
+    font-size: 19cqmin;
+    font-weight: 600;
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+  }
+
+  #dh-day, #dh-month {
+    font-size: 6cqmin;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  #dh-month {
+    color: var(--muted);
+  }
+
+  :root.s-dots #dots-head {
+    display: flex;
+  }
+
+  :root.s-dots #month-view > .row,
+  :root.s-dots #today {
+    display: none;
+  }
+
+  :root.s-dots #month-view {
+    justify-content: space-between;
+  }
+
+  :root.s-dots .day-label {
+    order: 2;
+    padding: 1.5cqmin 0 0;
+  }
+
+  :root.s-dots .cell {
+    order: 1;
+    height: 8cqmin;
+  }
+
+  :root.s-dots .cell span {
+    width: 2.4cqmin;
+    height: 2.4cqmin;
+    font-size: 0;
+    background: var(--fg);
+    opacity: 0.55;
+  }
+
+  :root.s-dots .cell.past span {
+    opacity: 0.22;
+  }
+
+  :root.s-dots .cell.today span {
+    width: 5.5cqmin;
+    height: 5.5cqmin;
+    background: var(--accent);
+    opacity: 1;
+  }
+
+  :root.s-dots .empty {
+    order: 1;
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    :root.s-dots #today {
+      display: none;
+    }
+
+    :root.s-dots #month-view {
+      justify-content: space-between;
+    }
+  }
 </style>
 </head>
 <body>
@@ -114,6 +194,7 @@
     <div id="today-month"></div>
   </div>
   <div id="month-view">
+    <div id="dots-head"><div id="dh-num" class="depth" style="--d: 3"></div><div><div id="dh-day"></div><div id="dh-month"></div></div></div>
     <div class="row">
       <span id="month" class="title"></span>
       <span id="day-name" class="label"></span>
@@ -130,8 +211,13 @@
 
 (function () {
   var cfg = W.config({
-    weekStart: 'monday'    // monday or sunday
+    weekStart: 'monday',   // monday or sunday
+    style: 'grid'          // grid (numbers) or dots
   });
+
+  if (cfg.style === 'dots') {
+    document.documentElement.classList.add('s-dots');
+  }
 
   var loc = 'en';
 
@@ -158,6 +244,9 @@
     W.$('today-num').textContent = now.getDate();
     W.$('today-day').textContent = cap(fmt({ weekday: 'long' }, now));
     W.$('today-month').textContent = cap(fmt({ month: 'long', year: 'numeric' }, now));
+    W.$('dh-num').textContent = now.getDate();
+    W.$('dh-day').textContent = fmt({ weekday: 'long' }, now);
+    W.$('dh-month').textContent = fmt({ month: 'long' }, now);
 
     var grid = W.$('grid');
     grid.innerHTML = '';
@@ -176,17 +265,28 @@
     var totalDays = new Date(year, month + 1, 0).getDate();
 
     for (var e = 0; e < offset; e++) {
-      grid.appendChild(document.createElement('div'));
+      var blank = document.createElement('div');
+      blank.className = 'empty';
+      grid.appendChild(blank);
     }
 
     for (var d = 1; d <= totalDays; d++) {
       var weekday = new Date(year, month, d).getDay();
       var cell = document.createElement('div');
-      cell.className = 'cell' + (weekday === 0 || weekday === 6 ? ' weekend' : '') + (d === now.getDate() ? ' today' : '');
+      cell.className = 'cell' + (weekday === 0 || weekday === 6 ? ' weekend' : '') + (d === now.getDate() ? ' today' : '') + (d < now.getDate() ? ' past' : '');
       var span = document.createElement('span');
       span.textContent = d;
       cell.appendChild(span);
       grid.appendChild(cell);
+    }
+
+    // Dots style puts the day letters under the grid: fill the last week so they line up.
+    if (cfg.style === 'dots') {
+      for (var t = (offset + totalDays) % 7; t > 0 && t < 7; t++) {
+        var tail = document.createElement('div');
+        tail.className = 'empty';
+        grid.appendChild(tail);
+      }
     }
 
     // Redraw just after midnight.

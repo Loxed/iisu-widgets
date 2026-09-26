@@ -6,7 +6,6 @@
 <title>Clock Widget</title>
 <link rel="stylesheet" href="shared/base.css" data-inline>
 <style>
-
   #root {
     justify-content: center;
     align-items: center;
@@ -20,44 +19,10 @@
     flex: none;
   }
 
-  .hand {
-    position: absolute;
-    bottom: 50%;
-    left: 50%;
-    transform-origin: bottom center;
-    border-radius: 999px;
-  }
-
-  #hh {
-    width: 2cqmin;
-    height: 28%;
-    margin-left: -1cqmin;
-    background: var(--fg);
-  }
-
-  #mh {
-    width: 1.5cqmin;
-    height: 40%;
-    margin-left: -0.75cqmin;
-    background: var(--fg);
-  }
-
-  #sh {
-    width: 0.8cqmin;
-    height: 44%;
-    margin-left: -0.4cqmin;
-    background: var(--subtle);
-  }
-
-  #cap {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 4cqmin;
-    height: 4cqmin;
-    margin: -2cqmin 0 0 -2cqmin;
-    border-radius: 50%;
-    background: var(--strong);
+  #face svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
   }
 
   #text {
@@ -84,12 +49,36 @@
     display: none;
   }
 
-  /* Digital style */
-  :root.digital #face {
+  svg text {
+    font-family: inherit;
+  }
+
+  .fg { fill: var(--fg); }
+  .muted { fill: var(--muted); }
+  .accent { fill: var(--accent); }
+  .ghost { fill: var(--fg); opacity: 0.1; }
+  .dial { fill: var(--fg); opacity: 0.07; }
+
+  /* Faces that fill the whole tile */
+  :root.s-split #root, :root.s-lcd #root, :root.s-roman #root, :root.s-wavy #root {
+    padding: 4cqmin;
+  }
+
+  :root.s-split #face, :root.s-lcd #face, :root.s-roman #face, :root.s-wavy #face {
+    width: 92cqmin;
+    height: 92cqmin;
+  }
+
+  :root.s-split #text, :root.s-lcd #text, :root.s-roman #text, :root.s-wavy #text {
     display: none;
   }
 
-  :root.digital #time {
+  /* Digital */
+  :root.s-digital #face {
+    display: none;
+  }
+
+  :root.s-digital #time {
     font-size: 26cqmin;
     font-weight: 600;
     color: var(--fg);
@@ -97,11 +86,11 @@
     line-height: 1;
   }
 
-  :root.digital.secs #time {
+  :root.s-digital.secs #time {
     font-size: 18cqmin;
   }
 
-  :root.digital #date {
+  :root.s-digital #date {
     display: block;
   }
 
@@ -112,12 +101,17 @@
       gap: 10cqmin;
     }
 
-    #face {
-      width: 62cqmin;
-      height: 62cqmin;
+    #face,
+    :root.s-roman #face,
+    :root.s-wavy #face {
+      width: 70cqmin;
+      height: 70cqmin;
     }
 
-    #text {
+    #text,
+    :root.s-roman #text,
+    :root.s-wavy #text {
+      display: flex;
       align-items: flex-start;
     }
 
@@ -134,12 +128,12 @@
       font-size: 8cqmin;
     }
 
-    :root.digital #text {
+    :root.s-digital #text {
       align-items: center;
     }
 
-    :root.digital #time,
-    :root.digital.secs #time {
+    :root.s-digital #time,
+    :root.s-digital.secs #time {
       font-size: 34cqmin;
     }
   }
@@ -147,12 +141,7 @@
 </head>
 <body>
 <div id="root">
-  <div id="face">
-    <div id="hh" class="hand"></div>
-    <div id="mh" class="hand"></div>
-    <div id="sh" class="hand"></div>
-    <div id="cap"></div>
-  </div>
+  <div id="face" class="depth" style="--d: 2"></div>
   <div id="text">
     <div id="time">--:--</div>
     <div id="date" class="label"></div>
@@ -164,32 +153,170 @@
 <script src="shared/icons.js" data-inline></script>
 <script src="shared/runtime.js" data-inline></script>
 <script>
-
 (function () {
   var cfg = W.config({
-    style: 'analog',      // analog or digital
+    style: 'analog',      // analog, digital, split, lcd, roman or wavy
     hours: '24',          // 24 or 12
     seconds: true
   });
 
-  if (cfg.style === 'digital') {
-    document.documentElement.classList.add('digital');
-  }
+  var STYLES = ['analog', 'digital', 'split', 'lcd', 'roman', 'wavy'];
+  var style = STYLES.indexOf(cfg.style) === -1 ? 'analog' : cfg.style;
+  var root = document.documentElement;
+  root.classList.add('s-' + style);
   if (cfg.seconds) {
-    document.documentElement.classList.add('secs');
-  } else {
-    W.$('sh').style.display = 'none';
+    root.classList.add('secs');
   }
 
-  var dateFmt;
-  try {
-    dateFmt = new Intl.DateTimeFormat('en', { weekday: 'long', day: 'numeric', month: 'long' });
-  } catch (e) {
-    dateFmt = new Intl.DateTimeFormat('en', { weekday: 'long', day: 'numeric', month: 'long' });
-  }
+  var WEEKDAY = new Intl.DateTimeFormat('en', { weekday: 'long' });
+  var DATE = new Intl.DateTimeFormat('en', { weekday: 'long', day: 'numeric', month: 'long' });
+  var MONTH = new Intl.DateTimeFormat('en', { month: 'short' });
 
   function pad(n) {
     return (n < 10 ? '0' : '') + n;
+  }
+
+  function f(n) {
+    return Math.round(n * 100) / 100;
+  }
+
+  function point(cx, cy, deg, r) {
+    var a = deg * Math.PI / 180;
+    return [f(cx + r * Math.sin(a)), f(cy - r * Math.cos(a))];
+  }
+
+  // A hand: a rounded line from `tail` behind the center to `len` in front, rotated later.
+  function hand(id, cx, cy, len, tail, width, color, opacity) {
+    return '<g id="' + id + '"><line x1="' + cx + '" y1="' + (cy + tail) + '" x2="' + cx + '" y2="' + (cy - len) + '" stroke="' + color +
+           '" stroke-width="' + width + '" stroke-linecap="round"' + (opacity ? ' opacity="' + opacity + '"' : '') + '/></g>';
+  }
+
+  function tick(cx, cy, deg, r1, r2, width, color, opacity) {
+    var a = point(cx, cy, deg, r1);
+    var b = point(cx, cy, deg, r2);
+    return '<line x1="' + a[0] + '" y1="' + a[1] + '" x2="' + b[0] + '" y2="' + b[1] + '" stroke="' + color + '" stroke-width="' + width +
+           '" stroke-linecap="round"' + (opacity ? ' opacity="' + opacity + '"' : '') + '/>';
+  }
+
+  var FG = 'var(--fg)';
+  var ACCENT = 'var(--accent)';
+  var center = { x: 50, y: 50 };
+  var svg = '';
+
+  if (style === 'analog' || style === 'digital') {
+    svg = hand('hh', 50, 50, 22, 0, 4.2, FG) + hand('mh', 50, 50, 32, 0, 3, FG) +
+          (cfg.seconds ? hand('sh', 50, 50, 36, 0, 1.2, 'var(--subtle)') : '') +
+          '<circle cx="50" cy="50" r="3" fill="var(--strong)"/>';
+  } else if (style === 'split') {
+    // Big dial in the lower left, hour and minute written in the top right.
+    center = { x: 44, y: 56 };
+    svg = '<circle cx="44" cy="56" r="40" class="dial"/>' +
+          [0, 90, 180, 270].map(function (d) { return tick(44, 56, d, 35, 39, 1, FG); }).join('') +
+          '<circle cx="44" cy="56" r="10" class="dial"/>' +
+          '<text id="wd" x="44" y="84" text-anchor="middle" font-size="3.6" letter-spacing="0.3" class="accent"></text>' +
+          hand('hh', 44, 56, 20, 0, 4, FG, 0.55) + hand('mh', 44, 56, 30, 0, 1.6, FG) +
+          (cfg.seconds ? hand('sh', 44, 56, 34, 6, 0.6, ACCENT) : '') +
+          '<circle cx="44" cy="56" r="3.2" fill="var(--strong)"/>' +
+          '<text id="big-h" x="95" y="19" text-anchor="end" font-size="15" class="fg"></text>' +
+          '<text id="big-m" x="95" y="34" text-anchor="end" font-size="15" class="muted"></text>';
+  } else if (style === 'lcd') {
+    // Seven-segment digits, hours over minutes, with the date written sideways.
+    var boxes = [[14, 8], [42, 8], [14, 56], [42, 56]];
+    boxes.forEach(function (b, i) {
+      svg += segDigit(i, b[0], b[1], 24, 36);
+    });
+    // Rotated a quarter turn: local x points up the screen.
+    svg += '<g transform="translate(77 36) rotate(-90)"><rect x="0" y="0" width="28" height="7.5" rx="3.75" class="fg"/>' +
+           '<text id="wd" x="14" y="5.2" text-anchor="middle" font-size="3.2" letter-spacing="0.2" style="fill: var(--on-strong)"></text></g>' +
+           '<text id="dm" transform="translate(93 92) rotate(-90)" font-size="10.5" class="fg"></text>';
+  } else if (style === 'roman') {
+    svg = '<circle cx="50" cy="50" r="46" class="dial"/>' +
+          '<text id="ghost-h" x="50" y="61" text-anchor="middle" font-size="32" class="fg" opacity="0.07"></text>' +
+          '<text x="50" y="18" text-anchor="middle" font-size="9" class="fg">XII</text>' +
+          '<text x="86" y="53" text-anchor="middle" font-size="9" class="fg">III</text>' +
+          '<text x="50" y="90" text-anchor="middle" font-size="9" class="fg">VI</text>' +
+          '<text x="14" y="53" text-anchor="middle" font-size="9" class="fg">IX</text>';
+    [30, 60, 120, 150, 210, 240, 300, 330].forEach(function (d) {
+      svg += tick(50, 50, d, 33, 39, 1.2, FG, 0.5);
+    });
+    svg += hand('hh', 50, 50, 20, 0, 3.4, FG) + hand('mh', 50, 50, 31, 0, 2, FG, 0.7) +
+           (cfg.seconds ? hand('sh', 50, 50, 38, 9, 0.9, ACCENT) : '') +
+           '<circle cx="50" cy="50" r="2.4" fill="var(--accent)"/>';
+  } else if (style === 'wavy') {
+    // Scalloped disc with 12, 3, 6 and 9, a thick soft hour hand and an accent minute hand.
+    var d = '';
+    for (var i = 0; i <= 360; i += 2) {
+      var r = 44 + 2.4 * Math.cos(i * 14 * Math.PI / 180);
+      var p = point(50, 50, i, r);
+      d += (i ? 'L' : 'M') + p[0] + ',' + p[1];
+    }
+    svg = '<path d="' + d + 'Z" fill="var(--fg)"/>' +
+          '<text x="50" y="19" text-anchor="middle" font-size="8" style="fill: var(--on-strong)">12</text>' +
+          '<text x="84" y="53" text-anchor="middle" font-size="8" style="fill: var(--on-strong)">3</text>' +
+          '<text x="50" y="87" text-anchor="middle" font-size="8" style="fill: var(--on-strong)">6</text>' +
+          '<text x="16" y="53" text-anchor="middle" font-size="8" style="fill: var(--on-strong)">9</text>' +
+          hand('hh', 50, 50, 18, 0, 8, 'var(--on-strong)', 0.18) + hand('mh', 50, 50, 28, 0, 3, ACCENT) +
+          (cfg.seconds ? hand('sh', 50, 50, 34, 0, 0.8, 'var(--on-strong)', 0.5) : '');
+  }
+
+  // Seven-segment digit (segments a to g) inside a w x h box.
+  function segDigit(index, x, y, w, h) {
+    var t = 4.4;
+    var g = 0.7;
+    function horiz(yc) {
+      var x1 = x + t / 2 + g;
+      var x2 = x + w - t / 2 - g;
+      return [[x1, yc], [x1 + t / 2, yc - t / 2], [x2 - t / 2, yc - t / 2], [x2, yc], [x2 - t / 2, yc + t / 2], [x1 + t / 2, yc + t / 2]];
+    }
+    function vert(xc, y1, y2) {
+      return [[xc, y1], [xc + t / 2, y1 + t / 2], [xc + t / 2, y2 - t / 2], [xc, y2], [xc - t / 2, y2 - t / 2], [xc - t / 2, y1 + t / 2]];
+    }
+    var top = y + t / 2;
+    var mid = y + h / 2;
+    var bot = y + h - t / 2;
+    var segs = {
+      a: horiz(top),
+      b: vert(x + w - t / 2, top + g, mid - g),
+      c: vert(x + w - t / 2, mid + g, bot - g),
+      d: horiz(bot),
+      e: vert(x + t / 2, mid + g, bot - g),
+      f: vert(x + t / 2, top + g, mid - g),
+      g: horiz(mid)
+    };
+    var out = '';
+    Object.keys(segs).forEach(function (k) {
+      out += '<polygon id="d' + index + k + '" class="ghost" points="' + segs[k].map(function (pt) { return f(pt[0]) + ',' + f(pt[1]); }).join(' ') + '"/>';
+    });
+    return out;
+  }
+
+  var SEGMENTS = ['abcdef', 'bc', 'abged', 'abgcd', 'fgbc', 'afgcd', 'afgedc', 'abc', 'abcdefg', 'abcdfg'];
+
+  function setDigit(index, n) {
+    'abcdefg'.split('').forEach(function (k) {
+      var el = document.getElementById('d' + index + k);
+      if (el) {
+        el.setAttribute('class', SEGMENTS[n].indexOf(k) !== -1 ? 'fg' : 'ghost');
+      }
+    });
+  }
+
+  if (svg) {
+    W.$('face').innerHTML = '<svg viewBox="0 0 100 100" aria-hidden="true">' + svg + '</svg>';
+  }
+
+  function rotate(id, deg) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.setAttribute('transform', 'rotate(' + f(deg) + ' ' + center.x + ' ' + center.y + ')');
+    }
+  }
+
+  function setText(id, text) {
+    var el = document.getElementById(id);
+    if (el && el.textContent !== text) {
+      el.textContent = text;
+    }
   }
 
   function update() {
@@ -197,20 +324,35 @@
     var s = now.getSeconds();
     var m = now.getMinutes();
     var h = now.getHours();
+    var shownH = cfg.hours === '12' ? (h % 12 || 12) : h;
 
-    W.$('sh').style.transform = 'rotate(' + (s * 6) + 'deg)';
-    W.$('mh').style.transform = 'rotate(' + ((m + s / 60) * 6) + 'deg)';
-    W.$('hh').style.transform = 'rotate(' + (((h % 12) + m / 60) * 30) + 'deg)';
+    rotate('sh', s * 6);
+    rotate('mh', (m + s / 60) * 6);
+    rotate('hh', ((h % 12) + m / 60) * 30);
+
+    var weekday = WEEKDAY.format(now).toUpperCase();
+    setText('wd', weekday);
+    setText('big-h', pad(shownH));
+    setText('big-m', pad(m));
+    setText('ghost-h', pad(shownH));
+    setText('dm', now.getDate() + ', ' + MONTH.format(now).toUpperCase());
+    if (style === 'lcd') {
+      var hs = pad(shownH);
+      var ms = pad(m);
+      setDigit(0, +hs[0]);
+      setDigit(1, +hs[1]);
+      setDigit(2, +ms[0]);
+      setDigit(3, +ms[1]);
+    }
 
     var text;
     if (cfg.hours === '12') {
-      var h12 = h % 12 || 12;
-      text = h12 + ':' + pad(m) + (cfg.seconds ? ':' + pad(s) : '') + '<small>' + (h < 12 ? 'AM' : 'PM') + '</small>';
+      text = shownH + ':' + pad(m) + (cfg.seconds ? ':' + pad(s) : '') + '<small>' + (h < 12 ? 'AM' : 'PM') + '</small>';
     } else {
       text = pad(h) + ':' + pad(m) + (cfg.seconds ? ':' + pad(s) : '');
     }
     W.$('time').innerHTML = text;
-    W.$('date').textContent = dateFmt.format(now);
+    setText('date', DATE.format(now));
   }
 
   update();

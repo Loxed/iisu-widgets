@@ -132,28 +132,248 @@
       display: none;
     }
   }
+
+  /* ---------- Styles: bold and card ---------- */
+  .alt {
+    display: none;
+    position: absolute;
+    inset: 0;
+    padding: 8cqmin;
+    overflow: hidden;
+  }
+
+  :root.s-bold .classic, :root.s-card .classic {
+    display: none !important;
+  }
+
+  :root.s-bold .alt.bold, :root.s-card .alt.card {
+    display: block;
+  }
+
+  .forecast {
+    display: none;
+    position: absolute;
+    left: 8cqmin;
+    right: 8cqmin;
+    bottom: 6cqmin;
+    justify-content: space-between;
+    gap: 3cqmin;
+  }
+
+  /* Bold */
+  :root.s-bold #root {
+    background: var(--wx, linear-gradient(160deg, #eef1f5, #9fb0c3));
+    transition: background 1s ease;
+  }
+
+  :root.s-bold #root::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.18;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .bold {
+    color: var(--wx-ink, #111633);
+    text-shadow: none;
+  }
+
+  .b-glyph {
+    position: absolute;
+    left: -14cqmin;
+    top: -12cqmin;
+    font-size: 72cqmin;
+    line-height: 0;
+    color: #ffffff;
+    opacity: 0.55;
+    filter: blur(0.7cqmin);
+  }
+
+  .b-place {
+    position: absolute;
+    right: 8cqmin;
+    top: 8cqmin;
+    text-align: right;
+  }
+
+  #b-city {
+    font-size: 9cqmin;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    line-height: 1.05;
+  }
+
+  #b-country {
+    font-size: 6.5cqmin;
+    text-transform: uppercase;
+    opacity: 0.45;
+  }
+
+  .b-temp {
+    position: absolute;
+    left: 7cqmin;
+    bottom: 3cqmin;
+    font-size: 44cqmin;
+    font-weight: 600;
+    letter-spacing: -0.05em;
+    line-height: 1;
+    color: #ffffff;
+    text-shadow: 0 1.2cqmin 3cqmin rgba(0, 0, 0, 0.14);
+  }
+
+  .b-cond {
+    position: absolute;
+    right: 8cqmin;
+    bottom: 8cqmin;
+    font-size: 5.5cqmin;
+    opacity: 0.7;
+  }
+
+  .b-forecast .day .name, .b-forecast .day .range span {
+    color: inherit;
+    opacity: 0.7;
+  }
+
+  /* Card */
+  .c-glyph {
+    position: absolute;
+    right: -10cqmin;
+    top: -8cqmin;
+    font-size: 52cqmin;
+    line-height: 0;
+    color: var(--fg);
+    opacity: 0.16;
+  }
+
+  .c-place {
+    position: relative;
+  }
+
+  #c-city {
+    font-size: 9cqmin;
+  }
+
+  #c-country {
+    font-size: 6cqmin;
+  }
+
+  .c-temp {
+    position: absolute;
+    left: 7cqmin;
+    top: 32cqmin;
+    font-size: 32cqmin;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+
+  .c-bottom {
+    position: absolute;
+    left: 8cqmin;
+    right: 8cqmin;
+    bottom: 8cqmin;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 3cqmin;
+  }
+
+  #c-cond {
+    font-size: 7.5cqmin;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #c-range {
+    font-size: 6cqmin;
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    .alt {
+      padding: 7cqmin 10cqmin;
+    }
+
+    .forecast {
+      display: flex;
+      left: auto;
+      right: 10cqmin;
+      width: 52%;
+      bottom: 8cqmin;
+    }
+
+    .b-temp {
+      left: 9cqmin;
+      font-size: 50cqmin;
+    }
+
+    .b-place {
+      right: 10cqmin;
+    }
+
+    .b-cond {
+      display: none;
+    }
+
+    .c-temp {
+      left: 9cqmin;
+      top: 28cqmin;
+      font-size: 36cqmin;
+    }
+
+    .c-bottom {
+      left: 10cqmin;
+      right: auto;
+      bottom: 8cqmin;
+      flex-direction: column;
+      gap: 1cqmin;
+    }
+  }
 </style>
 </head>
 <body>
 <div id="root">
-  <header class="row">
+  <header class="row classic">
     <span id="city" class="title"><span id="loc-icon"></span><span id="city-name">--</span></span>
     <span id="condition" class="label">Loading…</span>
   </header>
 
-  <div id="main">
+  <div id="main" class="classic">
     <span id="now-icon" class="depth" style="--d: 4"></span>
     <span id="temp">--°</span>
     <span id="feels"></span>
   </div>
 
-  <footer class="row">
+  <footer class="row classic">
     <span class="stat"><span data-icon="arrow-down"></span><span id="t-min">--°</span></span>
     <span class="stat"><span data-icon="arrow-up"></span><span id="t-max">--°</span></span>
     <span class="stat"><span data-icon="wind"></span><span id="wind">--</span></span>
   </footer>
 
-  <div id="forecast" class="row"></div>
+  <div id="forecast" class="row classic"></div>
+
+  <!-- Bold: colored by the weather, huge temperature -->
+  <div class="alt bold">
+    <div class="b-glyph" id="b-glyph"></div>
+    <div class="b-place"><div id="b-city">--</div><div id="b-country"></div></div>
+    <div class="b-temp depth" id="b-temp" style="--d: 4">--°</div>
+    <div class="b-cond" id="b-cond"></div>
+    <div class="b-forecast forecast" id="b-forecast"></div>
+  </div>
+
+  <!-- Card: city, big temperature, condition and today's range -->
+  <div class="alt card">
+    <div class="c-glyph depth" id="c-glyph" style="--d: 5"></div>
+    <div class="c-place"><div id="c-city" class="title">--</div><div id="c-country" class="label"></div></div>
+    <div class="c-temp" id="c-temp">--°</div>
+    <div class="c-bottom"><span id="c-cond">Loading…</span><span id="c-range" class="label"></span></div>
+    <div class="c-forecast forecast" id="c-forecast"></div>
+  </div>
 </div>
 
 <script id="widget-config" type="application/json">{}</script>
@@ -168,12 +388,38 @@
     lat: 48.8566,           // fixed location only
     lon: 2.3522,            // fixed location only
     city: 'Paris',          // name shown for a fixed location
+    country: 'France',      // shown by the bold and card styles
+    style: 'classic',       // classic, bold or card
     tempUnit: 'celsius',    // celsius or fahrenheit
     windUnit: 'kmh',        // kmh, mph, ms or kn
     refresh: 15             // minutes between updates
   });
 
   var WIND_LABEL = { kmh: 'km/h', mph: 'mph', ms: 'm/s', kn: 'kn' };
+  var STYLE = ['classic', 'bold', 'card'].indexOf(cfg.style) === -1 ? 'classic' : cfg.style;
+  document.documentElement.classList.add('s-' + STYLE);
+
+  // Bold style: background colors (light, mid, deep) and text color for each kind of weather.
+  var MOODS = {
+    clear: [['#fff4dd', '#ffc978', '#f39a4a'], '#1d1633'],
+    partly: [['#fff6e6', '#f6c88f', '#88b3e6'], '#131a3a'],
+    cloudy: [['#f3f5f8', '#c3ccd8', '#8a98ad'], '#141a2e'],
+    fog: [['#f6f6f6', '#d4d7dc', '#a6adb6'], '#1b1f28'],
+    rain: [['#e6f3ff', '#7cb6ec', '#3c74c6'], '#0f1a3a'],
+    snow: [['#f0fffa', '#5fe0b8', '#2ab2d6'], '#0e1e33'],
+    storm: [['#e4dfff', '#8c7be6', '#46359f'], '#ffffff'],
+    night: [['#7380d0', '#2c398a', '#131947'], '#ffffff']
+  };
+
+  function mood(code, isDay) {
+    if (code >= 95) return 'storm';
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
+    if (code >= 51) return 'rain';
+    if (code === 45 || code === 48) return 'fog';
+    if (code === 3) return 'cloudy';
+    if (!isDay) return 'night';
+    return code === 2 ? 'partly' : 'clear';
+  }
   var FALLBACK = { lat: 48.8566, lon: 2.3522, city: 'Paris' };
 
   document.querySelectorAll('[data-icon]').forEach(function (el) {
@@ -223,6 +469,25 @@
     W.$('t-max').textContent = Math.round(d.temperature_2m_max[0]) + '°';
     W.$('wind').textContent = Math.round(c.wind_speed_10m) + ' ' + WIND_LABEL[cfg.windUnit];
 
+    var country = place.country || '';
+    var range = 'H:' + Math.round(d.temperature_2m_max[0]) + '°  L:' + Math.round(d.temperature_2m_min[0]) + '°';
+    W.$('b-city').textContent = place.city || '--';
+    W.$('b-country').textContent = country;
+    W.$('b-temp').textContent = Math.round(c.temperature_2m) + '°';
+    W.$('b-cond').textContent = now.text;
+    W.$('b-glyph').innerHTML = W.icon(now.icon);
+    W.$('c-city').textContent = place.city || '--';
+    W.$('c-country').textContent = country;
+    W.$('c-temp').textContent = Math.round(c.temperature_2m) + '°';
+    W.$('c-cond').textContent = now.text;
+    W.$('c-range').textContent = range;
+    W.$('c-glyph').innerHTML = W.icon(now.icon);
+    var m = MOODS[mood(c.weather_code, c.is_day === 1)];
+    var rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--wx', 'radial-gradient(circle at 18% 12%, ' + m[0][0] + ' 0%, rgba(255,255,255,0) 58%), ' +
+      'radial-gradient(circle at 85% 95%, ' + m[0][2] + ' 0%, rgba(0,0,0,0) 60%), linear-gradient(160deg, ' + m[0][0] + ' 0%, ' + m[0][1] + ' 55%, ' + m[0][2] + ' 100%)');
+    rootStyle.setProperty('--wx-ink', m[1]);
+
     var html = '';
     for (var i = 0; i < d.time.length; i++) {
       html += '<div class="day"><span class="name">' + dayName(d.time[i], i) + '</span>' +
@@ -230,26 +495,28 @@
               '<span class="range">' + Math.round(d.temperature_2m_max[i]) + '° <span>' + Math.round(d.temperature_2m_min[i]) + '°</span></span></div>';
     }
     W.$('forecast').innerHTML = html;
+    W.$('b-forecast').innerHTML = html;
+    W.$('c-forecast').innerHTML = html;
   }
 
   function getPlace() {
     if (cfg.location === 'fixed') {
-      return Promise.resolve({ lat: cfg.lat, lon: cfg.lon, city: cfg.city, fromIp: false });
+      return Promise.resolve({ lat: cfg.lat, lon: cfg.lon, city: cfg.city, country: cfg.country, fromIp: false });
     }
-    var cached = W.store.get('ip-location', 6 * 3600 * 1000);
+    var cached = W.store.get('ip-location:v2', 6 * 3600 * 1000);
     if (cached) {
       return Promise.resolve(cached);
     }
     return W.fetchJson('https://get.geojs.io/v1/ip/geo.json', 8000).then(function (g) {
-      var place = { lat: parseFloat(g.latitude), lon: parseFloat(g.longitude), city: g.city || g.region || g.country, fromIp: true };
+      var place = { lat: parseFloat(g.latitude), lon: parseFloat(g.longitude), city: g.city || g.region || g.country, country: g.country || '', fromIp: true };
       if (isNaN(place.lat) || isNaN(place.lon)) {
         throw new Error('no coordinates');
       }
-      W.store.set('ip-location', place);
+      W.store.set('ip-location:v2', place);
       return place;
     }).catch(function (e) {
       W.log('IP location failed, using fallback', String(e));
-      return W.store.get('ip-location') || { lat: FALLBACK.lat, lon: FALLBACK.lon, city: FALLBACK.city, fromIp: false };
+      return W.store.get('ip-location:v2') || { lat: FALLBACK.lat, lon: FALLBACK.lon, city: FALLBACK.city, country: 'France', fromIp: false };
     });
   }
 

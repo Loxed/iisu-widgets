@@ -417,6 +417,15 @@ section.help strong {
 
   .seg {
     max-width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .seg button {
+    padding: 6px 9px;
+    font-size: 13px;
+    white-space: nowrap;
   }
 
   .grid {

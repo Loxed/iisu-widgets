@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Devices Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+  #root {
+    gap: 5cqmin;
+    --fill: #f2ee1a;
+    --fill-ink: #1b1b10;
+  }
+
+  :root.fill-green #root {
+    --fill: #7bd88f;
+    --fill-ink: #0f2414;
+  }
+
+  :root.fill-theme #root {
+    --fill: var(--fg);
+    --fill-ink: var(--on-strong);
+  }
+
+  #pills {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    justify-content: center;
+    gap: 3.5cqmin;
+  }
+
+  .pill {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    max-width: 30cqmin;
+    border-radius: 999px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6cqmin 0 7cqmin;
+    color: var(--fg);
+    text-shadow: none;
+  }
+
+  .pill::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--fg);
+    opacity: 0.09;
+  }
+
+  .level {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--fill);
+    transition: height 500ms ease;
+  }
+
+  .pill.low .level {
+    background: #ff4a4a;
+  }
+
+  .pill .icon-wrap, .pill .pct, .pill .name {
+    position: relative;
+  }
+
+  .icon-wrap {
+    font-size: 10cqmin;
+    line-height: 0;
+  }
+
+  .pct {
+    font-size: 7.5cqmin;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  /* Text sitting on the colored fill switches to the dark ink. */
+  .pill.inked-pct .pct, .pill.inked-icon .icon-wrap, .pill.inked-name .name {
+    color: var(--fill-ink);
+  }
+
+  .pill.low.inked-pct .pct, .pill.low.inked-icon .icon-wrap {
+    color: #2a0808;
+  }
+
+  .name {
+    display: none;
+    font-size: 4.6cqmin;
+    color: var(--muted);
+    max-width: 90%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pill.no-level .pct {
+    font-size: 5.5cqmin;
+    color: var(--muted);
+  }
+
+  .pill.waiting {
+    opacity: 0.6;
+  }
+
+  .pill.waiting .pct {
+    font-size: 4.4cqmin;
+    font-weight: 500;
+    line-height: 1.25;
+    text-align: center;
+    padding: 0 2cqmin;
+  }
+
+  .pill.waiting::before {
+    opacity: 0;
+  }
+
+  .pill.waiting {
+    border: 0.6cqmin dashed var(--subtle);
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    #root {
+      padding: 6cqmin 9cqmin;
+    }
+
+    #pills {
+      justify-content: center;
+      gap: 5cqmin;
+    }
+
+    .pill {
+      max-width: 26cqmin;
+    }
+
+    .name {
+      display: block;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <header class="row">
+    <span class="title">Devices</span>
+    <span id="summary" class="label"></span>
+  </header>
+  <div id="pills"></div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script>
+(function () {
+  var cfg = W.config({
+    fill: 'yellow',          // yellow, green or theme
+    lowAt: 20,               // below this level (%) a pill turns red
+    controllers: true,       // list connected controllers
+    builtIn: false           // also list the handheld's own built-in controls
+  });
+
+  document.documentElement.classList.add('fill-' + cfg.fill);
+
+  // Names of built-in handheld controls, hidden unless builtIn is on.
+  var BUILT_IN = /retroid|odin|ayn |ayaneo|anbernic|thor|built-?in|gpio|internal/i;
+  var battery = null;
+  var pads = [];
+
+  function shortName(id) {
+    var name = id.replace(/\(.*?\)/g, '').replace(/\b(wireless|controller|gamepad|bluetooth|xinput|standard)\b/gi, '').replace(/\s+/g, ' ').trim();
+    return name || 'Controller';
+  }
+
+  function pill(opts) {
+    var level = opts.level;
+    var cls = 'pill' + (opts.waiting ? ' waiting' : '') + (level === null ? ' no-level' : '') + (level !== null && level <= cfg.lowAt ? ' low' : '');
+    // Fill height: the icon sits in the top 30%, the number near the bottom.
+    if (level !== null && level >= 20) {
+      cls += ' inked-pct';
+    }
+    if (level !== null && level >= 55) {
+      cls += ' inked-name';
+    }
+    if (level !== null && level >= 78) {
+      cls += ' inked-icon';
+    }
+    return '<div class="' + cls + '">' +
+      (level !== null ? '<div class="level" style="height:' + level + '%"></div>' : '') +
+      '<span class="icon-wrap">' + W.icon(opts.icon) + '</span>' +
+      '<span class="name">' + opts.name + '</span>' +
+      '<span class="pct">' + opts.text + '</span></div>';
+  }
+
+  function render() {
+    var html = '';
+    var count = 0;
+    if (battery) {
+      var lvl = Math.round(battery.level * 100);
+      html += pill({ icon: battery.charging ? 'battery-charging' : 'tablet-smartphone', name: 'This device', level: lvl, text: lvl + '%' });
+      count++;
+    }
+    if (cfg.controllers) {
+      var shown = pads.filter(function (p) {
+        return cfg.builtIn || !BUILT_IN.test(p.id);
+      });
+      shown.slice(0, 4).forEach(function (p) {
+        html += pill({ icon: 'gamepad-2', name: shortName(p.id), level: null, text: 'On' });
+        count++;
+      });
+      if (!shown.length) {
+        html += pill({ icon: 'bluetooth', name: 'Controllers', level: null, text: 'Press any button', waiting: true });
+      }
+    }
+    if (!html) {
+      html = '<div class="hint">No battery information here.</div>';
+    }
+    W.$('pills').innerHTML = html;
+    W.$('summary').textContent = count + ' connected';
+  }
+
+  // Controllers only show up in the Gamepad API after one of their buttons is pressed.
+  function scanPads() {
+    var list = [];
+    try {
+      var raw = navigator.getGamepads ? navigator.getGamepads() : [];
+      for (var i = 0; i < raw.length; i++) {
+        if (raw[i] && raw[i].connected !== false) {
+          list.push({ id: raw[i].id, index: raw[i].index });
+        }
+      }
+    } catch (e) {}
+    var key = list.map(function (p) { return p.id; }).join('|');
+    var old = pads.map(function (p) { return p.id; }).join('|');
+    pads = list;
+    if (key !== old) {
+      render();
+    }
+  }
+
+  window.addEventListener('gamepadconnected', scanPads);
+  window.addEventListener('gamepaddisconnected', scanPads);
+  setInterval(scanPads, 2000);
+  scanPads();
+
+  if (navigator.getBattery) {
+    navigator.getBattery().then(function (b) {
+      battery = b;
+      render();
+      b.addEventListener('levelchange', render);
+      b.addEventListener('chargingchange', render);
+    }).catch(render);
+  }
+  render();
+})();
+</script>
+</body>
+</html>
