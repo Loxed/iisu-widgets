@@ -594,15 +594,6 @@
   })());
   document.body.classList.toggle('focused', state.view === 'focused');
 
-  // Global tilt switch.
-  var tiltSwitch = document.getElementById('tilt-switch');
-  tiltSwitch.setAttribute('aria-checked', String(!!state.tilt));
-  tiltSwitch.addEventListener('click', function () {
-    state.tilt = !state.tilt;
-    tiltSwitch.setAttribute('aria-checked', String(state.tilt));
-    refreshAll();
-  });
-
   var cards = document.getElementById('cards');
   GROUPS.forEach(function (g) {
     var list = WIDGETS.filter(function (w) {
