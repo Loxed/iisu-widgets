@@ -52,12 +52,15 @@
         {
           key: 'preview', label: 'Preview weather', type: 'select', def: '', previewOnly: true,
           choices: [['', 'Live weather'], ['clear-day', 'Sunny'], ['clear-night', 'Clear night'], ['mainly-clear', 'Mainly clear'],
-            ['partly-day', 'Partly cloudy'], ['partly-night', 'Partly cloudy, night'], ['overcast', 'Overcast'], ['windy', 'Windy'],
-            ['fog', 'Fog'], ['freezing-fog', 'Freezing fog'], ['drizzle', 'Drizzle'], ['freezing-drizzle', 'Freezing drizzle'],
-            ['rain', 'Rain'], ['heavy-rain', 'Heavy rain'], ['freezing-rain', 'Freezing rain'], ['showers', 'Showers'],
-            ['violent-showers', 'Violent showers'], ['snow', 'Snow'], ['heavy-snow', 'Heavy snow'], ['snow-grains', 'Snow grains'],
+            ['mainly-clear-night', 'Mainly clear, night'], ['partly-day', 'Partly cloudy'], ['partly-night', 'Partly cloudy, night'],
+            ['overcast', 'Overcast'], ['windy', 'Windy'], ['fog', 'Fog'], ['freezing-fog', 'Freezing fog'],
+            ['light-drizzle', 'Light drizzle'], ['drizzle', 'Drizzle'], ['heavy-drizzle', 'Heavy drizzle'], ['freezing-drizzle', 'Freezing drizzle'],
+            ['light-rain', 'Light rain'], ['rain', 'Rain'], ['heavy-rain', 'Heavy rain'], ['freezing-rain', 'Freezing rain'],
+            ['showers', 'Showers'], ['heavy-showers', 'Heavy showers'], ['violent-showers', 'Violent showers'],
+            ['light-snow', 'Light snow'], ['snow', 'Snow'], ['heavy-snow', 'Heavy snow'], ['snow-grains', 'Snow grains'],
             ['snow-showers', 'Snow showers'], ['thunderstorm', 'Thunderstorm'], ['hail', 'Hailstorm']]
-        }
+        },
+        { key: 'previewNight', label: 'Preview at night', type: 'switch', def: false, previewOnly: true }
       ],
       extra: { lat: 48.8566, lon: 2.3522, city: 'Paris', country: 'France' }
     },

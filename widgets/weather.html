@@ -394,41 +394,96 @@
     tempUnit: 'celsius',    // celsius or fahrenheit
     windUnit: 'kmh',        // kmh, mph, ms or kn
     refresh: 15,            // minutes between updates
-    preview: ''             // configurator only: show a sample weather (see PREVIEWS) instead of live data
+    preview: '',            // configurator only: show a sample weather (see PREVIEWS) instead of live data
+    previewNight: false     // configurator only: show that sample at night
   });
 
   var WIND_LABEL = { kmh: 'km/h', mph: 'mph', ms: 'm/s', kn: 'kn' };
   var STYLE = ['classic', 'bold', 'card'].indexOf(cfg.style) === -1 ? 'classic' : cfg.style;
   document.documentElement.classList.add('s-' + STYLE);
 
-  // Bold style: background colors (light, mid, deep) and text color for each kind of weather.
-  var MOODS = {
-    clear: [['#fff4dd', '#ffc978', '#f39a4a'], '#1d1633'],
-    partly: [['#fff6e6', '#f6c88f', '#88b3e6'], '#131a3a'],
-    cloudy: [['#f3f5f8', '#c3ccd8', '#8a98ad'], '#141a2e'],
-    fog: [['#f6f6f6', '#d4d7dc', '#a6adb6'], '#1b1f28'],
-    drizzle: [['#eef7ff', '#a9d2f2', '#6b9fd6'], '#0f1a3a'],
-    rain: [['#e6f3ff', '#7cb6ec', '#3c74c6'], '#0f1a3a'],
-    freezing: [['#f4fbff', '#b9dcf5', '#7aa7d9'], '#10203a'],
-    hail: [['#eef0ff', '#aab4f0', '#5d68c4'], '#161a4a'],
-    wind: [['#f1f8fb', '#b6d6e3', '#6f9fb8'], '#10222e'],
-    snow: [['#f0fffa', '#5fe0b8', '#2ab2d6'], '#0e1e33'],
-    storm: [['#e4dfff', '#8c7be6', '#46359f'], '#1b1245'],
-    night: [['#7380d0', '#2c398a', '#131947'], '#ffffff']
+  // Bold style: one gradient per weather situation.
+  // Each entry: [light, mid, deep] colors (top left to bottom right) and the text color.
+  var GRADIENTS = {
+    'clear-day':          [['#fff3d6', '#ffc15e', '#ff8a3d'], '#2a1606'],
+    'clear-night':        [['#7380d0', '#2c398a', '#131947'], '#ffffff'],
+    'mainly-clear-day':   [['#fff8e6', '#ffd48a', '#78c0ee'], '#1a1c33'],
+    'mainly-clear-night': [['#8a7fd6', '#3a2f86', '#150f3f'], '#ffffff'],
+    'partly-day':         [['#fff0e2', '#f7c4a4', '#6aa2e4'], '#131a3a'],
+    'partly-night':       [['#7089bb', '#2f4273', '#141d38'], '#ffffff'],
+    'overcast':           [['#eef1f5', '#bfc8d4', '#7f8da3'], '#161c2c'],
+    'windy':              [['#eefafc', '#9fdbe6', '#3f8fa8'], '#0d2530'],
+    'fog':                [['#f7f6f3', '#dcd8d0', '#a8a298'], '#26231d'],
+    'freezing-fog':       [['#f6fbff', '#d3e7ec', '#98bec8'], '#12262c'],
+    'light-drizzle':      [['#f0fbff', '#bfe6f0', '#7cc4d8'], '#0e2530'],
+    'drizzle':            [['#eef3ff', '#a7c2ef', '#6b8bd8'], '#111c40'],
+    'heavy-drizzle':      [['#e3eaf6', '#8fa2c8', '#4e6799'], '#ffffff'],
+    'freezing-drizzle':   [['#f7f5ff', '#d6cff5', '#9c8ee0'], '#1e1846'],
+    'light-rain':         [['#e6f6ff', '#86cdf2', '#3e9bd6'], '#0a2238'],
+    'rain':               [['#dbe8ff', '#6a98e6', '#2c50b4'], '#0a1433'],
+    'heavy-rain':         [['#cbd6f0', '#4868bd', '#172a70'], '#ffffff'],
+    'freezing-rain':      [['#f4f1ff', '#bcaef0', '#7760cf'], '#1d1250'],
+    'showers':            [['#fff2d9', '#9fd0f0', '#4a8fd8'], '#0f1a38'],
+    'heavy-showers':      [['#e0eef4', '#74a8c0', '#2d6b8a'], '#0b2230'],
+    'violent-showers':    [['#c0cadf', '#3d527d', '#131d3c'], '#ffffff'],
+    'light-snow':         [['#fafffd', '#c9f3e8', '#84dbc9'], '#0e2a2a'],
+    'snow':               [['#f0fffa', '#5fe0b8', '#2ab2d6'], '#0e1e33'],
+    'heavy-snow':         [['#eef9ff', '#8ccdf0', '#3a7cc6'], '#0d1d36'],
+    'snow-grains':        [['#fbfcff', '#dde5f1', '#a8b6cc'], '#1a2436'],
+    'snow-showers':       [['#f2fff4', '#98e4ae', '#3dab7c'], '#0b2618'],
+    'thunderstorm':       [['#d9cfff', '#6b50d2', '#231556'], '#ffffff'],
+    'hail':               [['#eef2f8', '#a6b6d4', '#59668f'], '#141c33']
   };
 
-  function mood(code, isDay, windy) {
-    if (code === 96 || code === 99) return 'hail';
-    if (code >= 95) return 'storm';
-    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
-    if (code === 56 || code === 57 || code === 66 || code === 67) return 'freezing';
-    if (code >= 51 && code <= 55) return 'drizzle';
-    if (code >= 61) return 'rain';
-    if (code === 45 || code === 48) return 'fog';
-    if (windy) return 'wind';
-    if (code === 3) return 'cloudy';
-    if (!isDay) return 'night';
-    return code === 2 ? 'partly' : 'clear';
+  // Which gradient a weather code uses.
+  function situation(code, isDay, windy) {
+    var dn = isDay ? '-day' : '-night';
+    if (windy) return 'windy';
+    switch (code) {
+      case 0: return 'clear' + dn;
+      case 1: return 'mainly-clear' + dn;
+      case 2: return 'partly' + dn;
+      case 3: return 'overcast';
+      case 45: return 'fog';
+      case 48: return 'freezing-fog';
+      case 51: return 'light-drizzle';
+      case 53: return 'drizzle';
+      case 55: return 'heavy-drizzle';
+      case 56: case 57: return 'freezing-drizzle';
+      case 61: return 'light-rain';
+      case 63: return 'rain';
+      case 65: return 'heavy-rain';
+      case 66: case 67: return 'freezing-rain';
+      case 80: return 'showers';
+      case 81: return 'heavy-showers';
+      case 82: return 'violent-showers';
+      case 71: return 'light-snow';
+      case 73: return 'snow';
+      case 75: return 'heavy-snow';
+      case 77: return 'snow-grains';
+      case 85: case 86: return 'snow-showers';
+      case 95: return 'thunderstorm';
+      case 96: case 99: return 'hail';
+      default: return 'overcast';
+    }
+  }
+
+  // Sets the bold background. Situations without their own night colors get darkened at night.
+  function applyGradient(code, isDay, windy) {
+    var key = situation(code, isDay, windy);
+    var g = GRADIENTS[key];
+    var c = g[0];
+    var ink = g[1];
+    var layers = 'radial-gradient(circle at 18% 12%, ' + c[0] + ' 0%, rgba(255,255,255,0) 58%), ' +
+                 'radial-gradient(circle at 85% 95%, ' + c[2] + ' 0%, rgba(0,0,0,0) 60%), ' +
+                 'linear-gradient(160deg, ' + c[0] + ' 0%, ' + c[1] + ' 55%, ' + c[2] + ' 100%)';
+    if (!isDay && key.indexOf('-night') === -1) {
+      layers = 'linear-gradient(160deg, rgba(10, 12, 40, 0.25) 0%, rgba(10, 12, 40, 0.5) 100%), ' + layers;
+      ink = '#ffffff';
+    }
+    var rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--wx', layers);
+    rootStyle.setProperty('--wx-ink', ink);
   }
 
   // Wind in km/h, whatever unit the forecast uses. "Windy" from 40 km/h when nothing is falling.
@@ -480,7 +535,9 @@
 
   // Sample weather for the configurator's preview: code, day or night, temperature (°C), wind (km/h).
   var PREVIEWS = {
-    'clear-day': [0, 1, 26, 8], 'clear-night': [0, 0, 14, 5], 'mainly-clear': [1, 1, 22, 10],
+    'clear-day': [0, 1, 26, 8], 'clear-night': [0, 0, 14, 5], 'mainly-clear': [1, 1, 22, 10], 'mainly-clear-night': [1, 0, 15, 6],
+    'light-drizzle': [51, 1, 13, 8], 'heavy-drizzle': [55, 1, 11, 14], 'light-rain': [61, 1, 13, 12],
+    'heavy-showers': [81, 1, 15, 26], 'light-snow': [71, 1, -1, 8],
     'partly-day': [2, 1, 19, 12], 'partly-night': [2, 0, 12, 8], 'overcast': [3, 1, 15, 14],
     'windy': [3, 1, 13, 52], 'fog': [45, 1, 9, 3], 'freezing-fog': [48, 1, -3, 4],
     'drizzle': [53, 1, 12, 10], 'freezing-drizzle': [56, 1, -1, 12], 'rain': [63, 1, 11, 18],
@@ -498,7 +555,7 @@
     }
     var codes = [p[0], 3, 61, 0, 95];
     return {
-      current: { temperature_2m: t(p[2]), apparent_temperature: t(p[2] - 2), weather_code: p[0], wind_speed_10m: p[3] / (TO_KMH[cfg.windUnit] || 1), is_day: p[1] },
+      current: { temperature_2m: t(p[2]), apparent_temperature: t(p[2] - 2), weather_code: p[0], wind_speed_10m: p[3] / (TO_KMH[cfg.windUnit] || 1), is_day: cfg.previewNight ? 0 : p[1] },
       daily: {
         time: [0, 1, 2, 3, 4].map(function (i) {
           var d = new Date(Date.now() + i * 86400000);
@@ -552,11 +609,7 @@
     W.$('c-cond').textContent = now.text;
     W.$('c-range').textContent = range;
     W.$('c-glyph').innerHTML = W.icon(now.icon);
-    var m = MOODS[mood(c.weather_code, c.is_day === 1, windy)];
-    var rootStyle = document.documentElement.style;
-    rootStyle.setProperty('--wx', 'radial-gradient(circle at 18% 12%, ' + m[0][0] + ' 0%, rgba(255,255,255,0) 58%), ' +
-      'radial-gradient(circle at 85% 95%, ' + m[0][2] + ' 0%, rgba(0,0,0,0) 60%), linear-gradient(160deg, ' + m[0][0] + ' 0%, ' + m[0][1] + ' 55%, ' + m[0][2] + ' 100%)');
-    rootStyle.setProperty('--wx-ink', m[1]);
+    applyGradient(c.weather_code, c.is_day === 1, windy);
 
     var html = '';
     for (var i = 0; i < d.time.length; i++) {
