@@ -147,26 +147,6 @@
       ]
     },
     {
-      id: 'snake',
-      group: 'games',
-      name: 'Snake',
-      desc: 'Eat, grow, don\'t bite yourself. Best scores are kept on the device.',
-      options: [
-        { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
-        { key: 'walls', label: 'Walls', type: 'seg', def: 'solid', choices: [['solid', 'Solid'], ['wrap', 'Wrap around']] },
-        { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
-      ]
-    },
-    {
-      id: '2048',
-      group: 'games',
-      name: '2048',
-      desc: 'Slide and merge tiles to reach 2048. Your game is saved, so you can leave and come back.',
-      options: [
-        { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
-      ]
-    },
-    {
       id: 'fire',
       group: 'games',
       name: 'Game & Watch: Fire',
@@ -219,7 +199,27 @@
         { key: 'sound', label: 'Sound effects', type: 'switch', def: true },
         { key: 'duck', label: 'Lower iiSU music while playing', type: 'switch', def: true }
       ]
-    }
+    },
+    {
+      id: 'snake',
+      group: 'games',
+      name: 'Snake',
+      desc: 'Eat, grow, don\'t bite yourself. Best scores are kept on the device.',
+      options: [
+        { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
+        { key: 'walls', label: 'Walls', type: 'seg', def: 'solid', choices: [['solid', 'Solid'], ['wrap', 'Wrap around']] },
+        { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
+      ]
+    },
+    {
+      id: '2048',
+      group: 'games',
+      name: '2048',
+      desc: 'Slide and merge tiles to reach 2048. Your game is saved, so you can leave and come back.',
+      options: [
+        { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
+      ]
+    },
     // {
     //   id: 'dvd',
     //   group: 'decor',
