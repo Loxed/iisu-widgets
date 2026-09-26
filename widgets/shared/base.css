@@ -20,15 +20,16 @@
 }
 
 :root[data-theme="aurora"] {
-  --bg: radial-gradient(circle at 12% 18%, #5a3cf2 0%, rgba(90, 60, 242, 0) 55%),
-        radial-gradient(circle at 88% 85%, #22d4f5 0%, rgba(34, 212, 245, 0) 55%),
-        linear-gradient(135deg, #7b52f5 0%, #3a8cf0 55%, #9fe9ff 100%);
+  /* The iiSU logo gradient: sky blue at the top left, violet at the bottom right. */
+  --bg: radial-gradient(circle at 12% 10%, #71e0ff 0%, rgba(113, 224, 255, 0) 55%),
+        radial-gradient(circle at 90% 92%, #c56eff 0%, rgba(197, 110, 255, 0) 55%),
+        linear-gradient(160deg, #68ccff 0%, #5e84ff 45%, #8258fa 75%, #c56eff 100%);
   --fg: #ffffff;
-  --muted: rgba(255, 255, 255, 0.82);
-  --subtle: rgba(255, 255, 255, 0.62);
+  --muted: rgba(255, 255, 255, 0.85);
+  --subtle: rgba(255, 255, 255, 0.65);
   --strong: #ffffff;
-  --on-strong: #3b2fb8;
-  --accent: #23136e;
+  --on-strong: #3700da;
+  --accent: #3700da;
 }
 
 :root[data-theme="transparent"] {

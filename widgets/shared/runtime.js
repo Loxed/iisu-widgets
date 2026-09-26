@@ -9,9 +9,10 @@ var W = (function () {
   // Address of this file when the widget is hosted; empty once inlined into a download.
   var SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
   var COMMON = {
-    theme: 'light',       // light, dark, transparent, custom
-    bg: '#414344',        // custom theme only
-    fg: '#ffffff',        // custom theme only
+    theme: 'light',       // light, dark, aurora, transparent, custom
+    bg: '#68ccff',        // custom theme only: top left color (iiSU blue)
+    bg2: '#c56eff',       // custom theme only: bottom right color (iiSU violet)
+    fg: '#ffffff',        // custom theme only: text color
     font: 'cal-sans',     // see fonts.js
     tilt: false,          // move the widget's content slightly when the handheld tilts
     resize: 'fade'        // animation when iiSU resizes the widget: none or fade
@@ -275,14 +276,16 @@ var W = (function () {
     var theme = cfg.theme || 'light';
     root.setAttribute('data-theme', theme);
     if (theme === 'custom') {
-      var bg = cfg.bg || '#414344';
+      var bg = cfg.bg || '#68ccff';
+      var bg2 = cfg.bg2 || bg;
       var fg = cfg.fg || '#ffffff';
-      root.style.setProperty('--bg', bg);
+      // Same two colors give a flat background.
+      root.style.setProperty('--bg', bg === bg2 ? bg : 'linear-gradient(135deg, ' + bg + ' 0%, ' + bg2 + ' 100%)');
       root.style.setProperty('--fg', fg);
       root.style.setProperty('--muted', fg);
       root.style.setProperty('--subtle', fg);
       root.style.setProperty('--strong', fg);
-      root.style.setProperty('--on-strong', bg);
+      root.style.setProperty('--on-strong', bg2);
     }
   }
 

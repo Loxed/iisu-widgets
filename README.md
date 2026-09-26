@@ -9,7 +9,7 @@ Web widgets and mini games for the iiSU launcher, with a configurator page to se
 | Decor | Scene (layered landscape that follows the time of day and the handheld's tilt) |
 | Games | Snake, 2048 |
 
-Themes: light, dark, aurora (gradient with film grain), transparent and custom colors.
+Themes: light, dark, aurora (the iiSU logo gradient, sky blue `#68ccff` to violet `#c56eff`, with film grain), transparent and custom (a top left and a bottom right color, iiSU blue and violet by default, plus a text color).
 
 The Scene widget moves its layers with the handheld's motion sensor. The global tilt effect is disabled in the configurator; the code stays in `runtime.js` and can still be tried with `?tilt=true`.
 

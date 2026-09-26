@@ -140,7 +140,7 @@
 
   var SAVE_KEY = 'iisu-configurator';
   var DEFAULT_FONT = 'cal-sans';
-  var state = { theme: 'dark', font: DEFAULT_FONT, tilt: false, resize: 'fade', bg: '#414344', fg: '#ffffff', view: 'tile', widgets: {} };
+  var state = { theme: 'dark', font: DEFAULT_FONT, tilt: false, resize: 'fade', bg: '#68ccff', bg2: '#c56eff', fg: '#ffffff', view: 'tile', widgets: {} };
   var fontAvailable = { 'cal-sans': true };
 
   WIDGETS.forEach(function (w) {
@@ -160,11 +160,15 @@
     var saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
     if (saved) {
       // 'tilt' is no longer restored: its switch was removed, so a saved 'on' could not be turned off.
-      ['theme', 'font', 'resize', 'bg', 'fg', 'view'].forEach(function (k) {
+      ['theme', 'font', 'resize', 'bg', 'bg2', 'fg', 'view'].forEach(function (k) {
         if (saved[k] !== undefined) {
           state[k] = saved[k];
         }
       });
+      // Saved before custom had two colors: keep that flat color.
+      if (saved.bg && !saved.bg2) {
+        state.bg2 = saved.bg;
+      }
       Object.keys(saved.widgets || {}).forEach(function (id) {
         // Only keep settings that still exist (older versions had more).
         Object.keys(saved.widgets[id] || {}).forEach(function (k) {
@@ -236,6 +240,7 @@
     }
     if (state.theme === 'custom') {
       cfg.bg = state.bg;
+      cfg.bg2 = state.bg2;
       cfg.fg = state.fg;
     }
     Object.keys(state.widgets[w.id]).forEach(function (k) {
@@ -552,7 +557,7 @@
   })());
   customBox.classList.toggle('hidden', state.theme !== 'custom');
 
-  ['bg', 'fg'].forEach(function (k) {
+  ['bg', 'bg2', 'fg'].forEach(function (k) {
     var input = document.getElementById(k);
     input.value = state[k];
     var timer;
