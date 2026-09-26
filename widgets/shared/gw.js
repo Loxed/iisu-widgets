@@ -4,7 +4,7 @@
 // A game gives:
 //   id, title, size: [w, h] (logical screen size), hud: { digits: [x, y], misses: [x, y] }
 //   segments(S, cfg): registers the screen, S.seg(id, x, y, w, h, draw) and S.print(draw)
-//   create(api): returns one game with tick(), move(dir), tap(x, y), auto(), render(on, blink),
+//   create(api): returns one game with tick(), move(dir), tap(x, y), auto(), render(on, blink, t),
 //                interval(score), afterMiss()
 //
 // Graphics can be replaced with a skin (cfg.skin: address of a JSON file):
@@ -16,6 +16,7 @@
 //   "size": [w, h]                 screen size in pixels (the background's size)
 //   "segments": { id: [sx, sy, sw, sh, dx, dy] }   drawn at (dx, dy), unscaled
 //   "hud": { "digits": [x, y], "scale": 0.5, "misses": [x, y], "missStep": 12, "label": [x, y], "missLabel": [x, y] }
+//   "ghostSkip": ["fall-"]          segment ids starting with these get no ghost
 //   "@miss", "@miss-label", "@game-a", "@game-b" in segments: sprites for the miss icon, the MISS
 //   word (shown after a miss) and the GAME A / GAME B label.
 // With a size, built-in segments the skin leaves out are not drawn. "pixelated": true keeps pixel art sharp.
@@ -138,6 +139,10 @@ var GW = (function () {
     var size = game.size || [320, 200];
     var hud = game.hud;
     var canvas = W.$('board');
+    // Greyscale unless cfg.color is on (colored skins keep their colors then).
+    if (cfg.color !== true) {
+      canvas.style.filter = 'grayscale(1)';
+    }
     var ctx = canvas.getContext('2d');
     var ghostCanvas = document.createElement('canvas');
     var gctx = ghostCanvas.getContext('2d');
@@ -213,7 +218,8 @@ var GW = (function () {
         segments: data.segments || {},
         ghosts: data.ghosts !== false,
         layout: !!data.size,
-        pixelated: !!data.pixelated
+        pixelated: !!data.pixelated,
+        ghostSkip: data.ghostSkip || []
       };
       if (data.size) {
         size = data.size;
@@ -353,7 +359,12 @@ var GW = (function () {
       gctx.restore();
       if (cfg.ghosts !== false && (!skin || skin.ghosts)) {
         segs.forEach(function (s) {
-          paintSeg(gctx, s, look.ghost);
+          var skip = skin && skin.ghostSkip.some(function (prefix) {
+            return s.id.indexOf(prefix) === 0;
+          });
+          if (!skip) {
+            paintSeg(gctx, s, look.ghost);
+          }
         });
         for (var i = 0; i < 4; i++) {
           digit(gctx, digitX(i), hud.digits[1], null);
@@ -445,6 +456,7 @@ var GW = (function () {
     var misses = 0;
     var nextTick = 0;
     var phaseEnd = 0;
+    var phaseStart = 0;       // when the current miss or freeze began (render gets the time since)
     var blink = false;
     var nextBlink = 0;
     var dirty = true;
@@ -482,6 +494,10 @@ var GW = (function () {
       misses: function () {
         return misses;
       },
+      // [x, y] center of a segment on screen, in the same coordinates as tap(x, y).
+      center: function (id) {
+        return center(id);
+      },
       demo: function () {
         return !real;
       },
@@ -497,7 +513,8 @@ var GW = (function () {
       // Stops the game for ms (bonus jingle, for example).
       freeze: function (ms) {
         phase = 'freeze';
-        phaseEnd = performance.now() + ms;
+        phaseStart = performance.now();
+        phaseEnd = phaseStart + ms;
         beep('bonus');
       },
       // A miss: the game stops while the lost character blinks.
@@ -508,7 +525,8 @@ var GW = (function () {
           W.log('demo miss', game.id, score);
         }
         phase = 'miss';
-        phaseEnd = performance.now() + 1600;
+        phaseStart = performance.now();
+        phaseEnd = phaseStart + 1600;
         blink = true;
         nextBlink = performance.now() + 220;
         beep('miss');
@@ -602,7 +620,7 @@ var GW = (function () {
           if (s) {
             paintSeg(ctx, s, 1);
           }
-        }, blink);
+        }, blink, phase === 'miss' || phase === 'freeze' ? performance.now() - phaseStart : 0);
       }
       var text;
       var showColon = false;
@@ -706,12 +724,20 @@ var GW = (function () {
       }
     }
 
-    // Screen position (client coordinates) to the game's own screen coordinates
-    // (scaled back from a skin's screen size when it has one).
+    // Screen position (client coordinates) to screen coordinates (the skin's, when it has a layout).
     function toLogical(x, y) {
       var r = canvas.getBoundingClientRect();
-      var base = game.size || [320, 200];
-      return { x: (x - r.left - offX) / scale * base[0] / size[0], y: (y - r.top - offY) / scale * base[1] / size[1] };
+      return { x: (x - r.left - offX) / scale, y: (y - r.top - offY) / scale };
+    }
+
+    // Center of a segment as it is drawn (in the skin's layout when there is one), for taps.
+    function center(id) {
+      var s = byId[id];
+      var cut = skin && skin.segments[id];
+      if (cut && cut.length >= 6) {
+        return [cut[4] + cut[2] / 2, cut[5] + cut[3] / 2];
+      }
+      return s ? [s.x + s.w / 2, s.y + s.h / 2] : [0, 0];
     }
 
     Input.on(function (a) {

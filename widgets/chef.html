@@ -103,6 +103,7 @@
 <script src="shared/input.js" data-inline></script>
 <script src="shared/sound.js" data-inline></script>
 <script src="shared/gw.js" data-inline></script>
+<script src="../skins/chef-gallery/skin.js" data-inline></script>
 <script>
 // Chef (Game & Watch, 1981). Rules of the original:
 // - The chef moves left and right under the food and flips it back up with his pan.
@@ -116,9 +117,11 @@
   var cfg = W.config({
     mode: 'a',          // a or b
     speed: 'normal',    // slow, normal or fast
-    look: 'lcd',        // lcd (grey green LCD) or theme (the widget theme's colors)
+    look: 'lcd',        // built-in drawings only: lcd (grey green LCD) or theme (the widget theme's colors)
+    ghosts: true,       // show the faint unlit sprites behind the game, like the LCD's unlit segments
+    color: false,       // false: greyscale screen, true: the skin's own colors
     sound: true,
-    skin: '',           // address of a skin JSON file (see shared/gw.js)
+    skin: 'gallery',    // gallery (Game & Watch Gallery sprites), none (built-in drawings) or the address of a skin JSON file
     outline: false      // show every segment's box and id, to make a skin
   });
 
@@ -178,7 +181,7 @@
         D.circle(c, 310, 162, 2);
       });
 
-      S.seg('cat', 6, 58, 52, 50, function (c) {
+      function drawCat(c) {
         c.beginPath();
         c.ellipse(24, 38, 17, 12, 0, 0, Math.PI * 2);
         c.fill();
@@ -190,7 +193,11 @@
         c.moveTo(8, 42);
         c.quadraticCurveTo(-2, 30, 6, 16);
         c.stroke();
-      });
+      }
+
+      // The cat sitting, and the cat while it holds food on its fork (the fork is its own segment).
+      S.seg('cat', 6, 58, 52, 50, drawCat);
+      S.seg('cat-grab', 6, 58, 52, 50, drawCat);
 
       var col0 = COLS[0];
       var forkY = levelY(FORK_LEVEL);
@@ -371,7 +378,7 @@
           return false;
         },
         tap: function (x) {
-          return this.move(x < COLS[chef] - 10 ? 'left' : 'right');
+          return this.move(x < api.center('pan-' + chef)[0] ? 'left' : 'right');
         },
         auto: function () {
           var next = null;
@@ -385,7 +392,8 @@
           }
         },
         render: function (on, blink) {
-          on('cat');
+          var grabbing = foods.some(function (f) { return f.held > 0 && f !== dropped; });
+          on(grabbing ? 'cat-grab' : 'cat');
           on('chef-' + chef);
           on((tossed === chef ? 'toss-' : 'pan-') + chef);
           foods.forEach(function (f) {

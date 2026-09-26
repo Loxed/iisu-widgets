@@ -179,39 +179,44 @@
         { key: 'mode', label: 'Game', type: 'seg', def: 'a', choices: [['a', 'Game A'], ['b', 'Game B']] },
         { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
         { key: 'ghosts', label: 'Faint background sprites', type: 'switch', def: true },
+        { key: 'color', label: 'Color', type: 'switch', def: false },
         { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
       ]
     },
-    // {
-    //   id: 'chef',
-    //   group: 'games',
-    //   name: 'Chef',
-    //   desc: 'Game & Watch rules: flip the food with the pan before the mouse gets it, and watch the cat\'s fork. Three pieces in Game A, four in Game B.',
-    //   credits: [
-    //     { name: 'Game & Watch: Chef', by: 'Nintendo', note: 'original game (1981), graphics redrawn' }
-    //   ],
-    //   options: [
-    //     { key: 'mode', label: 'Game', type: 'seg', def: 'a', choices: [['a', 'Game A'], ['b', 'Game B']] },
-    //     { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
-    //     { key: 'look', label: 'Screen', type: 'seg', def: 'lcd', choices: [['lcd', 'LCD'], ['theme', 'Theme colors']] },
-    //     { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
-    //   ]
-    // },
-    // {
-    //   id: 'manhole',
-    //   group: 'games',
-    //   name: 'Manhole',
-    //   desc: 'Game & Watch rules: hold the lid under the manhole people are about to cross. Up, down, left and right pick the hole, or tap it. Double points from 300 with no misses.',
-    //   credits: [
-    //     { name: 'Game & Watch: Manhole', by: 'Nintendo', note: 'original game (1981), graphics redrawn' }
-    //   ],
-    //   options: [
-    //     { key: 'mode', label: 'Game', type: 'seg', def: 'a', choices: [['a', 'Game A'], ['b', 'Game B']] },
-    //     { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
-    //     { key: 'look', label: 'Screen', type: 'seg', def: 'lcd', choices: [['lcd', 'LCD'], ['theme', 'Theme colors']] },
-    //     { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
-    //   ]
-    // }
+    {
+      id: 'chef',
+      group: 'games',
+      name: 'Game & Watch: Chef',
+      desc: 'Flip the food with the pan before the mouse gets it, and watch the cat\'s fork. Three pieces of food in Game A, four in Game B. The tile shows the clock while the game plays itself.',
+      credits: [
+        { name: 'Game & Watch: Chef', by: 'Nintendo', note: 'original game (1981)' },
+        { name: 'Game & Watch Gallery sprites', by: 'Classic Jack', note: 'ripped (The Spriters Resource)' }
+      ],
+      options: [
+        { key: 'mode', label: 'Game', type: 'seg', def: 'a', choices: [['a', 'Game A'], ['b', 'Game B']] },
+        { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
+        { key: 'ghosts', label: 'Faint background sprites', type: 'switch', def: true },
+        { key: 'color', label: 'Color', type: 'switch', def: false },
+        { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
+      ]
+    },
+    {
+      id: 'manhole',
+      group: 'games',
+      name: 'Game & Watch: Manhole',
+      desc: 'Hold the lid under the manhole people are about to cross. Up, down, left and right pick the hole, or tap it. Double points from 300 with no misses. The tile shows the clock while the game plays itself.',
+      credits: [
+        { name: 'Game & Watch: Manhole', by: 'Nintendo', note: 'original game (1981)' },
+        { name: 'Game & Watch Gallery sprites', by: 'Classic Jack', note: 'ripped (The Spriters Resource)' }
+      ],
+      options: [
+        { key: 'mode', label: 'Game', type: 'seg', def: 'a', choices: [['a', 'Game A'], ['b', 'Game B']] },
+        { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
+        { key: 'ghosts', label: 'Faint background sprites', type: 'switch', def: true },
+        { key: 'color', label: 'Color', type: 'switch', def: false },
+        { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
+      ]
+    }
     // {
     //   id: 'dvd',
     //   group: 'decor',

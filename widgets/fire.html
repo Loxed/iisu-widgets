@@ -117,6 +117,7 @@
     speed: 'normal',    // slow, normal or fast
     look: 'lcd',        // built-in drawings only: lcd (grey green LCD) or theme (the widget theme's colors)
     ghosts: true,       // show the faint unlit sprites behind the game, like the LCD's unlit segments
+    color: false,       // false: greyscale screen, true: the skin's own colors
     sound: true,
     skin: 'gallery',    // gallery (Game & Watch Gallery sprites), none (built-in drawings) or the address of a skin JSON file
     outline: false      // show every segment's box and id, to make a skin
@@ -333,7 +334,7 @@
           return false;
         },
         tap: function (x) {
-          return this.move(x < NETS[player] ? 'left' : 'right');
+          return this.move(x < api.center('men-' + player)[0] ? 'left' : 'right');
         },
         auto: function () {
           var soonest = null;

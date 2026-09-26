@@ -78,7 +78,7 @@ Any card can show a **Credits** bubble: add `credits: [{ name, by, url, byUrl, l
 - The tile shows the clock and the game playing itself, like the originals when nobody plays. Focus the widget and press A (or tap) to play.
 - Fire: three net positions, jumpers bounce three times into the ambulance, 1 point per bounce, misses cleared at 200 and 500. Game B: jumpers from two floors.
 - Chef: 1 point per flip, the cat's fork holds the leftmost food for a moment, the mouse eats what falls, misses cleared at 200 and 500. Game A: 3 foods, Game B: 4.
-- Manhole: four holes, up, down, left and right (or a tap) move the lid, 1 point per crossing. At 300 points: double points until the next miss if there are no misses, otherwise the misses are cleared. Game B: more walkers.
+- Manhole: four holes, up, down, left and right (or a tap on the hole) move the lid, 1 point per crossing. At 300 points: double points until the next miss if there are no misses, otherwise the misses are cleared. Game B: more walkers.
 - New jumpers, flights and walkers are only let in when the player can reach every landing in time.
 
 **Skins.** Each game has a `skin` setting: the address of a JSON file with a sprite sheet.
@@ -103,6 +103,8 @@ A skin can also bring its own screen layout, for sprites drawn for a different s
 - `"pixelated": true` keeps pixel art sharp when it is scaled up.
 
 Fire uses the Game & Watch Gallery sprites by default (`skin: 'gallery'`, credits: Nintendo, ripped by Mario Gamer, shaded and recolored by Grynz). They live in `skins/fire-gallery/`: `sheet.png`, `background.png` and `skin.json` are the sources, and `skin.js` is the same skin with the images embedded, loaded with `data-inline` so downloads work offline. After changing the sources, rebuild `skin.js` (it sets `GW.skins.gallery`). `skin: 'none'` goes back to the redrawn LCD, and any other value is read as the address of a skin JSON file.
+
+Chef uses the Game & Watch Gallery sprites the same way (`skins/chef-gallery/`, ripped by Classic Jack). Its Game A uses the three left columns of the four. Manhole too (`skins/manhole-gallery/`, ripped by Classic Jack): its walkways have ten steps with the holes on the 4th and 7th, and a fall plays as eight frames (four tumbling, four splashing). A skin's `ghostSkip` lists segment ids that get no ghost, used there for the overlapping fall frames.
 
 ## Fonts
 

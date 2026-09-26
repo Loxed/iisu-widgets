@@ -103,6 +103,7 @@
 <script src="shared/input.js" data-inline></script>
 <script src="shared/sound.js" data-inline></script>
 <script src="shared/gw.js" data-inline></script>
+<script src="../skins/manhole-gallery/skin.js" data-inline></script>
 <script>
 // Manhole (Game & Watch, 1981). Rules of the original:
 // - People walk along two walkways with two open manholes each, the top one left to right,
@@ -117,16 +118,19 @@
   var cfg = W.config({
     mode: 'a',          // a or b
     speed: 'normal',    // slow, normal or fast
-    look: 'lcd',        // lcd (grey green LCD) or theme (the widget theme's colors)
+    look: 'lcd',        // built-in drawings only: lcd (grey green LCD) or theme (the widget theme's colors)
+    ghosts: true,       // show the faint unlit sprites behind the game, like the LCD's unlit segments
+    color: false,       // false: greyscale screen, true: the skin's own colors
     sound: true,
-    skin: '',           // address of a skin JSON file (see shared/gw.js)
+    skin: 'gallery',    // gallery (Game & Watch Gallery sprites), none (built-in drawings) or the address of a skin JSON file
     outline: false      // show every segment's box and id, to make a skin
   });
 
   var D = GW.draw;
-  var HOLE_X = [96, 224];            // left and right manholes, on both walkways
+  var HOLE_X = [112, 208];           // left and right manholes, on both walkways
   var STREET_Y = [80, 158];          // where the walkers' feet are
-  var XS = [32, 64, 96, 128, 160, 192, 224, 256, 288];
+  var XS = [16, 48, 80, 112, 144, 176, 208, 240, 272, 304];   // ten steps, holes on the 4th and 7th
+  var FALL_FRAMES = 8;               // a fall plays as 8 frames: 4 falling, 4 splashing
   // Walkway 0 goes left to right, walkway 1 right to left. Holes: 0 top left, 1 top right,
   // 2 bottom left, 3 bottom right (street * 2 + side).
   var PATHS = [XS, XS.slice().reverse()];
@@ -158,8 +162,8 @@
           }
           // Doorways at both ends of each walkway.
           c.lineWidth = 2;
-          c.strokeRect(-2, y - 36, 14, 36);
-          c.strokeRect(308, y - 36, 14, 36);
+          c.strokeRect(-2, y - 36, 8, 36);
+          c.strokeRect(314, y - 36, 8, 36);
         });
         // Water under the top holes' ledges and along the bottom.
         HOLE_X.forEach(function (x) {
@@ -186,10 +190,22 @@
           D.rect(c, 2, 1, 28, 4, 1.5);
           D.figure(c, 16, 22, 34, { arms: 'up', legs: 'stand' });
         });
-        S.seg('fall-' + h, x - 13, y + 8, 26, 30, function (c) {
-          D.figure(c, 13, 13, 26, { arms: 'up', legs: 'spread', rot: Math.PI });
-          D.poly(c, [[2, 30], [6, 22], [10, 28], [13, 20], [16, 28], [20, 22], [24, 30]]);
-        });
+        for (var k = 0; k < FALL_FRAMES; k++) {
+          (function (k) {
+            if (k < 4) {
+              // Tumbling down the hole.
+              S.seg('fall-' + h + '-' + k, x - 13, y + 2 + k * 6, 26, 26, function (c) {
+                D.figure(c, 13, 13, 24, { arms: 'up', legs: 'spread', rot: Math.PI * (0.5 + k / 3) });
+              });
+            } else {
+              // The splash, getting smaller.
+              var t = 1 - (k - 4) / 4;
+              S.seg('fall-' + h + '-' + k, x - 13, y + 22, 26, 16, function (c) {
+                D.poly(c, [[1, 16], [5, 16 - 10 * t], [9, 14], [13, 16 - 14 * t], [17, 14], [21, 16 - 10 * t], [25, 16]]);
+              });
+            }
+          })(k);
+        }
       });
 
       // Double points indicator.
@@ -303,8 +319,19 @@
           }
           return setLid(street, dir === 'left' ? 0 : 1);
         },
+        // Moves the lid to the hole nearest to the tap.
         tap: function (x, y) {
-          return setLid(y < (STREET_Y[0] + STREET_Y[1]) / 2 + 10 ? 0 : 1, x < 160 ? 0 : 1);
+          var best = 0;
+          var bestD = Infinity;
+          [0, 1, 2, 3].forEach(function (h) {
+            var c = api.center('man-' + h);
+            var d = (c[0] - x) * (c[0] - x) + (c[1] - y) * (c[1] - y);
+            if (d < bestD) {
+              bestD = d;
+              best = h;
+            }
+          });
+          return setLid(best >> 1, best % 2);
         },
         auto: function () {
           var next = null;
@@ -318,13 +345,13 @@
             lid = next.hole;
           }
         },
-        render: function (on, blink) {
+        render: function (on, blink, t) {
           on('man-' + lid);
           walkers.forEach(function (w) {
             on(PREFIX[w.street] + w.idx);
           });
-          if (fell !== null && blink) {
-            on('fall-' + fell);
+          if (fell !== null) {
+            on('fall-' + fell + '-' + Math.min(FALL_FRAMES - 1, Math.floor(t / 200)));
           }
           if (double) {
             on('double');
