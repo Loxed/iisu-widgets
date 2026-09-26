@@ -122,7 +122,9 @@ Tracks are looped with an 8 second overlap, which hides the fade-out most rips e
 
 iiSU only runs a widget while its page is on screen, and stops its sound when the page goes away. `widgets/pagemusic.html` uses that: a picture or GIF with one music loop, so each iiSU page can have its own music. On the card, choose the music and the picture; the download carries both inside (a 3 minute track is 1 to 5 MB), so there is nothing else to install. It fades in when the page shows up, continues where it stopped, loops with a crossfade (or exactly, for tracks made to loop), and lowers iiSU's own music.
 
-Cards can use `type: 'file'` options: the chosen file stays in memory on the page (never in saved settings), the preview gets a `blob:` address and the download gets a `data:` URI. Previews get `preview: true`, so music waits for a tap there.
+Since iiSU may reload the widget each time its page comes back, it is built to start fast: the music plays through an `<audio>` element (it starts within a fraction of a second, where Web Audio would first decode the whole track), the downloaded files sit in `#media-*` blocks at the end of the file and are copied to IndexedDB (`iisu-widgets-media`) on the first run, so later runs play from there before the page has finished loading, and the position is saved every second. The audio element also takes Android's audio focus, which is what lowers iiSU's music.
+
+Cards can use `type: 'file'` options: the chosen file stays in memory on the page (never in saved settings), the preview gets a `blob:` address and the download gets the file as a `data:` URI in a `<script type="text/plain" id="media-<key>">` block at the end of the file, with `"#media-<key>"` in the settings. Previews get `preview: true`, so music waits for a tap there.
 
 The Hourly music widget has a test mode (`debug`): it shows the hour, the track, the position in the loop and the pass number, up and down step through the hours, and `cycle` runs a whole hour in 20 or 60 seconds.
 

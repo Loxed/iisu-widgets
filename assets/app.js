@@ -154,7 +154,7 @@
       id: 'pagemusic',
       group: 'decor',
       name: 'Page music',
-      desc: 'A picture or GIF with its own music loop. iiSU only runs a widget while its page is on screen, so put one on each page to give every page its own music. It fades in when the page shows up. Tap to play or pause.',
+      desc: 'A picture or GIF with its own music loop. iiSU only runs a widget while its page is on screen, so put one on each page to give every page its own music. It fades in when the page shows up and lowers iiSU\'s own music. Tap to play or pause. Smaller files load faster: a 3 minute track in Opus or AAC at 96 kbps is about 2 MB.',
       options: [
         { key: 'track', label: 'Music', type: 'file', accept: 'audio/*', def: '' },
         { key: 'image', label: 'Picture or GIF', type: 'file', accept: 'image/*', def: '' },
@@ -162,8 +162,7 @@
         { key: 'volume', label: 'Volume', type: 'seg', def: 0.7, choices: [[0.4, 'Low'], [0.7, 'Medium'], [1, 'High']] },
         { key: 'fadeIn', label: 'Fade in', type: 'seg', def: 2, choices: [[0.5, 'Quick'], [2, 'Medium'], [5, 'Slow']] },
         { key: 'loop', label: 'Loop', type: 'seg', def: 'blend', choices: [['blend', 'Crossfade'], ['exact', 'Exact']] },
-        { key: 'showName', label: 'Show the track name', type: 'switch', def: true },
-        { key: 'duck', label: 'Lower iiSU music while playing', type: 'switch', def: true }
+        { key: 'showName', label: 'Show the track name', type: 'switch', def: true }
       ]
     },
     {
@@ -413,6 +412,7 @@
       }
       if (m) {
         cfg[o.key + 'Name'] = m.name;
+        cfg[o.key + 'Size'] = m.size;
       }
     });
     if (forPreview) {
@@ -561,13 +561,22 @@
         html = html.replace('</head>', function () {
           return '<style id="widget-fonts">\n' + css + '\n</style>\n</head>';
         });
+        // Chosen files go at the end of the file in their own blocks ("#media-<key>" in the settings),
+        // so the widget's code runs before the browser has read them (see widgets/pagemusic.html).
         var cfg = settingsFor(w);
+        var blocks = [];
         return Promise.all(fileOptions(w).map(function (o) {
           var m = media[w.id] && media[w.id][o.key];
           return m ? toDataUri(m.url).then(function (uri) {
-            cfg[o.key] = uri;
+            cfg[o.key] = '#media-' + o.key;
+            blocks.push('<script type="text/plain" id="media-' + o.key + '">' + uri + '<\/script>');
           }) : null;
         })).then(function () {
+          if (blocks.length) {
+            html = html.replace(/<\/body>(?![\s\S]*<\/body>)/, function () {
+              return blocks.join('\n') + '\n</body>';
+            });
+          }
           return cfg;
         });
       }).then(function (cfg) {
@@ -824,7 +833,7 @@
             URL.revokeObjectURL(media[w.id][o.key].url);
           }
           media[w.id][o.key] = { name: f.name, url: URL.createObjectURL(f), size: f.size };
-          label.textContent = f.name + ' (' + (f.size / 1048576).toFixed(1) + ' MB)';
+          label.textContent = f.name + ' (' + (f.size / 1048576).toFixed(1) + ' MB' + (f.size > 5 * 1048576 ? ', big: slower to load' : '') + ')';
           clear.classList.remove('hidden');
           input.value = '';
           changed();

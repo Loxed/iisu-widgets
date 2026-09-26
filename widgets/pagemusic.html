@@ -126,51 +126,140 @@
 <script src="shared/fonts.js" data-inline></script>
 <script src="shared/icons.js" data-inline></script>
 <script src="shared/runtime.js" data-inline></script>
-<script src="shared/sound.js" data-inline></script>
 <script>
 // Page music: a picture or GIF with its own music loop. iiSU only runs a widget while its page is on
-// screen, so one of these on each page gives every page its own music: it fades in when the page
-// shows up and stops when you leave, picking up where it was next time.
+// screen, so one of these on each page gives every page its own music.
+// Built to start fast, since iiSU may reload the widget every time its page comes back:
+// - the music plays through an <audio> element, which starts after a fraction of a second
+//   (Web Audio would first decode the whole track, several seconds for a big file);
+// - the track and the picture sit at the end of the file (#media-* blocks) and are copied into
+//   IndexedDB the first time, so later loads play from there before the page has even finished loading;
+// - the position is saved every second, so the music continues where it was.
 (function () {
   var cfg = W.config({
-    track: '',            // the music (embedded by the configurator)
+    track: '',            // the music: an address, or "#media-track" for a block at the end of the file
     trackName: '',
-    image: '',            // the picture or GIF (embedded by the configurator)
+    trackSize: 0,
+    image: '',            // the picture or GIF, same forms
+    imageName: '',
+    imageSize: 0,
     fit: 'cover',         // cover (fill, cropping the edges) or contain (whole picture)
     volume: 0.7,          // 0 to 1
     fadeIn: 2,            // seconds to fade in when the page shows up
     loop: 'blend',        // blend (overlap the end and the start, for tracks that fade out) or exact
     loopBlend: 8,         // seconds of overlap in blend mode
-    duck: true,           // lower iiSU's background music while this plays
     showName: true,       // show the track name for a few seconds when it starts
     preview: false        // set by the configurator's preview: wait for a tap instead of playing by itself
   });
 
   document.documentElement.classList.add('fit-' + cfg.fit);
 
-  var AC = window.AudioContext || window.webkitAudioContext;
-  var ctx = null;
-  var master = null;
-  var buffer = null;
-  var voice = null;
-  var paused = cfg.preview || W.store.get('pagemusic:paused:' + cfg.trackName) === true;
-  var failed = '';
-  var chipTimer = null;
   var name = (cfg.trackName || 'Music').replace(/\.[^.]+$/, '');
+  var POS_KEY = 'pagemusic:pos:' + cfg.trackName + ':' + cfg.trackSize;
+  var PAUSE_KEY = 'pagemusic:paused:' + cfg.trackName;
+  var paused = cfg.preview || W.store.get(PAUSE_KEY) === true;
+  var players = [];       // one <audio>, or two taking turns in blend mode
+  var active = null;      // the player currently in charge
+  var src = null;
+  var failed = '';
+  var blocked = false;    // the web view wants a tap before playing
+  var chipTimer = null;
+  var fade = null;        // { el, from, to, start, ms }
+
+  // ---------- Media: cache in IndexedDB, else read the block at the end of the file ----------
+  var parsed = new Promise(function (resolve) {
+    if (document.readyState !== 'loading') {
+      resolve();
+    } else {
+      document.addEventListener('DOMContentLoaded', resolve);
+    }
+  });
+
+  function db() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open('iisu-widgets-media', 1);
+      req.onupgradeneeded = function () {
+        req.result.createObjectStore('files');
+      };
+      req.onsuccess = function () {
+        resolve(req.result);
+      };
+      req.onerror = function () {
+        reject(req.error);
+      };
+    });
+  }
+
+  function cacheGet(key) {
+    return db().then(function (d) {
+      return new Promise(function (resolve) {
+        var r = d.transaction('files', 'readonly').objectStore('files').get(key);
+        r.onsuccess = function () {
+          resolve(r.result || null);
+        };
+        r.onerror = function () {
+          resolve(null);
+        };
+      });
+    }).catch(function () {
+      return null;
+    });
+  }
+
+  function cachePut(key, blob) {
+    db().then(function (d) {
+      d.transaction('files', 'readwrite').objectStore('files').put(blob, key);
+    }).catch(function () {});
+  }
+
+  // Resolves with an address the page can use for a media option.
+  function mediaUrl(key) {
+    var v = cfg[key];
+    if (!v) {
+      return Promise.resolve(null);
+    }
+    if (v.charAt(0) !== '#') {
+      return Promise.resolve(v);
+    }
+    var cacheKey = 'pagemusic/' + key + '/' + cfg[key + 'Name'] + '/' + cfg[key + 'Size'];
+    return cacheGet(cacheKey).then(function (blob) {
+      if (blob) {
+        return URL.createObjectURL(blob);
+      }
+      return parsed.then(function () {
+        var block = document.getElementById(v.slice(1));
+        if (!block) {
+          throw new Error('missing ' + v);
+        }
+        return fetch(block.textContent.trim()).then(function (r) {
+          return r.blob();
+        }).then(function (b) {
+          block.textContent = '';
+          cachePut(cacheKey, b);
+          return URL.createObjectURL(b);
+        });
+      });
+    });
+  }
 
   // ---------- Picture ----------
   if (cfg.image) {
-    W.$('pic').src = cfg.image;
-    W.$('pic').style.display = '';
-    W.$('empty').style.display = 'none';
+    mediaUrl('image').then(function (url) {
+      W.$('pic').src = url;
+      W.$('pic').style.display = '';
+      W.$('empty').style.display = 'none';
+    });
   } else {
     W.$('empty').innerHTML = W.icon('music') + '<div>' + (cfg.track ? name : 'Choose music and a picture on the configurator page') + '</div>';
   }
 
   // ---------- Status chip ----------
+  function isPlaying() {
+    return !!active && !active.paused && !paused;
+  }
+
   function status() {
-    var playing = !!voice && !paused && ctx && ctx.state === 'running';
-    document.documentElement.classList.toggle('playing', playing);
+    document.documentElement.classList.toggle('playing', isPlaying());
     var text = '';
     var stay = true;
     if (failed) {
@@ -179,8 +268,10 @@
       text = cfg.image ? 'No music chosen' : '';
     } else if (paused) {
       text = 'Paused, tap to play';
-    } else if (!ctx || ctx.state !== 'running' || !buffer) {
-      text = buffer ? 'Tap to play' : 'Loading…';
+    } else if (blocked) {
+      text = 'Tap to play';
+    } else if (!isPlaying()) {
+      text = 'Loading…';
     } else {
       text = name;
       stay = false;
@@ -190,101 +281,125 @@
     W.$('chip').classList.toggle('hidden', !show);
     clearTimeout(chipTimer);
     if (show && !stay) {
-      // The track name only shows for a moment when the music starts.
       chipTimer = setTimeout(function () {
         W.$('chip').classList.add('hidden');
       }, 4000);
     }
   }
 
-  // ---------- Audio ----------
-  function context() {
-    if (!ctx) {
-      ctx = new AC();
-      master = ctx.createGain();
-      master.gain.value = 0;
-      master.connect(ctx.destination);
-      ctx.onstatechange = function () {
-        duck();
+  // ---------- Playback ----------
+  function makePlayer() {
+    var a = new Audio();
+    a.preload = 'auto';
+    a.loop = cfg.loop === 'exact';
+    a.src = src;
+    a.addEventListener('playing', status);
+    a.addEventListener('pause', status);
+    a.addEventListener('error', function () {
+      failed = 'Could not read the music';
+      status();
+    });
+    return a;
+  }
+
+  function fadeVolume(el, to, seconds) {
+    fade = { el: el, from: el.volume, to: to, start: performance.now(), ms: Math.max(50, seconds * 1000) };
+  }
+
+  function tryPlay(el) {
+    var p = el.play();
+    if (p && p.catch) {
+      p.then(function () {
+        blocked = false;
         status();
-      };
-    }
-    return ctx;
-  }
-
-  function duck() {
-    Sound.duck(cfg.duck && !paused && !!voice && ctx && ctx.state === 'running' && document.visibilityState === 'visible');
-  }
-
-  // Blend mode: passes of the track overlap by loopBlend seconds, so a fade-out at the end is hidden.
-  function schedulePass(v, first) {
-    var d = buffer.duration;
-    var blend = Math.min(cfg.loopBlend, d / 4);
-    var t = v.next;
-    var src = ctx.createBufferSource();
-    var g = ctx.createGain();
-    src.buffer = buffer;
-    src.connect(g);
-    g.connect(master);
-    g.gain.setValueAtTime(first ? 1 : 0, t);
-    if (!first) {
-      g.gain.linearRampToValueAtTime(1, t + blend);
-    }
-    g.gain.setValueAtTime(1, t + d - blend);
-    g.gain.linearRampToValueAtTime(0, t + d);
-    src.start(t);
-    src.stop(t + d + 0.05);
-    v.sources.push(src);
-    v.next = t + d - blend;
-  }
-
-  function startVoice() {
-    var v = { next: ctx.currentTime + 0.05, sources: [] };
-    if (cfg.loop === 'exact') {
-      var src = ctx.createBufferSource();
-      src.buffer = buffer;
-      src.loop = true;
-      src.connect(master);
-      src.start(v.next);
-      v.sources.push(src);
-      v.next = Infinity;
-    } else {
-      schedulePass(v, true);
-    }
-    return v;
-  }
-
-  function stopVoice() {
-    if (voice) {
-      voice.sources.forEach(function (s) {
-        try {
-          s.stop();
-        } catch (e) {}
+      }).catch(function (e) {
+        if (e && e.name === 'NotAllowedError') {
+          blocked = true;
+        }
+        status();
       });
-      voice = null;
     }
   }
 
-  function fadeTo(value, seconds) {
-    var t = ctx.currentTime;
-    master.gain.cancelScheduledValues(t);
-    master.gain.setValueAtTime(master.gain.value, t);
-    master.gain.linearRampToValueAtTime(value, t + Math.max(0.05, seconds));
+  function play() {
+    paused = false;
+    W.store.set(PAUSE_KEY, false);
+    if (!src || !active) {
+      status();
+      return;
+    }
+    active.volume = 0;
+    tryPlay(active);
+    fadeVolume(active, cfg.volume, cfg.fadeIn);
+    status();
   }
 
-  function load() {
+  function pause() {
+    paused = true;
+    W.store.set(PAUSE_KEY, true);
+    players.forEach(function (p) {
+      p.pause();
+    });
+    status();
+  }
+
+  // Blend mode: a few seconds before the end, the other player starts from the beginning and they
+  // crossfade, which hides the fade-out most game rips end with.
+  function tick() {
+    if (!active || paused || active.paused) {
+      return;
+    }
+    if (cfg.loop === 'blend' && players.length === 2 && active.duration > 0) {
+      var blend = Math.min(cfg.loopBlend, active.duration / 4);
+      if (active.currentTime >= active.duration - blend) {
+        var next = players[0] === active ? players[1] : players[0];
+        next.currentTime = 0;
+        next.volume = 0;
+        tryPlay(next);
+        fadeVolume(next, cfg.volume, blend);
+        var old = active;
+        active = next;
+        setTimeout(function () {
+          old.pause();
+        }, blend * 1000 + 200);
+      }
+    }
+    // The outgoing player fades out along with the incoming one fading in.
+    players.forEach(function (p) {
+      if (p !== active && !p.paused && p.duration > 0) {
+        var blendOut = Math.min(cfg.loopBlend, p.duration / 4);
+        var left = p.duration - p.currentTime;
+        p.volume = Math.max(0, Math.min(cfg.volume, cfg.volume * left / blendOut));
+      }
+    });
+    W.store.set(POS_KEY, active.currentTime);
+  }
+
+  function animate(now) {
+    if (fade) {
+      var k = Math.min(1, (now - fade.start) / fade.ms);
+      fade.el.volume = Math.max(0, Math.min(1, fade.from + (fade.to - fade.from) * k));
+      if (k >= 1) {
+        fade = null;
+      }
+    }
+    requestAnimationFrame(animate);
+  }
+
+  function start() {
     if (!cfg.track) {
       status();
-      return Promise.resolve();
+      return;
     }
-    return fetch(cfg.track).then(function (r) {
-      return r.arrayBuffer();
-    }).then(function (data) {
-      return new Promise(function (resolve, reject) {
-        context().decodeAudioData(data, resolve, reject);
-      });
-    }).then(function (b) {
-      buffer = b;
+    mediaUrl('track').then(function (url) {
+      src = url;
+      players = cfg.loop === 'blend' ? [makePlayer(), makePlayer()] : [makePlayer()];
+      active = players[0];
+      // Continue where the music was the last time this page was on screen.
+      var pos = W.store.get(POS_KEY);
+      if (typeof pos === 'number' && pos > 0) {
+        active.currentTime = pos;
+      }
       if (!paused) {
         play();
       }
@@ -296,71 +411,27 @@
     });
   }
 
-  function play() {
-    paused = false;
-    W.store.set('pagemusic:paused:' + cfg.trackName, false);
-    if (!buffer) {
-      status();
-      return;
-    }
-    context();
-    var go = function () {
-      if (!voice) {
-        voice = startVoice();
-      }
-      fadeTo(cfg.volume, cfg.fadeIn);
-      duck();
-      status();
-    };
-    if (ctx.state === 'running') {
-      go();
-    } else {
-      ctx.resume().then(go, status);
-      // If the web view wants a tap first, resume() waits: show "Tap to play" meanwhile.
-      setTimeout(status, 300);
-    }
-  }
-
-  function pause() {
-    paused = true;
-    W.store.set('pagemusic:paused:' + cfg.trackName, true);
-    if (ctx) {
-      fadeTo(0, 0.4);
-      setTimeout(function () {
-        if (paused) {
-          stopVoice();
-        }
-      }, 500);
-    }
-    duck();
-    status();
-  }
-
-  // Keeps the blend loop going.
-  setInterval(function () {
-    if (voice && ctx && ctx.state === 'running' && ctx.currentTime > voice.next - 3) {
-      schedulePass(voice, false);
-    }
-  }, 1000);
-
-  // Page hidden: freeze the audio clock (the track continues from there) and fade in again on return.
+  // Page hidden: pause (the position is kept). Page back: fade in again.
   document.addEventListener('visibilitychange', function () {
-    if (!ctx) {
+    if (!active) {
       return;
     }
     if (document.visibilityState === 'visible') {
-      if (!paused && buffer) {
-        master.gain.setValueAtTime(0, ctx.currentTime);
-        ctx.resume().then(function () {
-          fadeTo(cfg.volume, cfg.fadeIn);
-          duck();
-          status();
-        }, status);
+      if (!paused) {
+        play();
       }
     } else {
-      ctx.suspend().catch(function () {});
+      W.store.set(POS_KEY, active.currentTime);
+      players.forEach(function (p) {
+        p.pause();
+      });
     }
-    duck();
+  });
+
+  window.addEventListener('pagehide', function () {
+    if (active) {
+      W.store.set(POS_KEY, active.currentTime);
+    }
   });
 
   // A tap plays or pauses (it also counts as the tap the web view may want before sound).
@@ -368,14 +439,16 @@
     if (!cfg.track) {
       return;
     }
-    if (paused || !voice || !ctx || ctx.state !== 'running') {
+    if (paused || blocked || !isPlaying()) {
       play();
     } else {
       pause();
     }
   });
 
-  load();
+  setInterval(tick, 250);
+  requestAnimationFrame(animate);
+  start();
   status();
 })();
 </script>
