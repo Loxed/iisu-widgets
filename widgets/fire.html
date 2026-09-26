@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fire Game & Watch - Discrete LCD Style</title>
+    <style>
+        body {
+            background-color: #2c3e50;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Courier New', Courier, monospace;
+            color: white;
+        }
+        #ui {
+            display: flex;
+            gap: 40px;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        #game-container {
+            position: relative;
+            border: 15px solid #ecf0f1;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #9ea792; /* Classic Game & Watch greenish LCD color */
+        }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <div>FireScore: <span id="score">0</span></div>
+    <div>Best: <span id="best">0</span></div>
+    <div>Miss: <span id="misses">0</span></div>
+</div>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const missesEl = document.getElementById('misses');
+
+    // --- CONSTANTS & DISCRETE POSITIONS ---
+    const LANES = [150, 400, 650]; 
+    const AMBULANCE_X = 750;
+    const GROUND_Y = 520;
+    const TRAMPOLINE_Y = 480;
+    const MAX_MISSES = 3;
+    const STEPS_PER_PHASE = 5; // 5 discrete frames per phase
+
+    // THE CURVE: Pre-calculated discrete positions for every step.
+    // Format: {x, y, rotation}
+    function getTrajectory(phase, step) {
+        // Phase 0: Falling from window to Left Trampoline
+        if (phase === 0) {
+            const yPos = [100, 200, 300, 400, TRAMPOLINE_Y];
+            return { x: LANES[0], y: yPos[step], rot: 0 };
+        }
+        // Phase 1: Jumping from Left to Middle Trampoline
+        if (phase === 1) {
+            const xPos = [150, 212, 275, 337, LANES[1]];
+            const yPos = [TRAMPOLINE_Y, 350, 250, 350, TRAMPOLINE_Y];
+            const rots = [0, Math.PI/2, Math.PI, Math.PI*1.5, 0]; // Discrete 90deg spins
+            return { x: xPos[step], y: yPos[step], rot: rots[step] };
+        }
+        // Phase 2: Jumping from Middle to Right Trampoline
+        if (phase === 2) {
+            const xPos = [400, 462, 525, 587, LANES[2]];
+            const yPos = [TRAMPOLINE_Y, 350, 250, 350, TRAMPOLINE_Y];
+            const rots = [0, Math.PI/2, Math.PI, Math.PI*1.5, 0];
+            return { x: xPos[step], y: yPos[step], rot: rots[step] };
+        }
+        // Phase 3: Flat walk from Right Trampoline to Ambulance
+        if (phase === 3) {
+            const xPos = [650, 675, 700, 725, AMBULANCE_X];
+            return { x: xPos[step], y: TRAMPOLINE_Y, rot: 0 }; // FLAT
+        }
+        return { x: 0, y: 0, rot: 0 };
+    }
+
+    // --- GAME STATE ---
+    let score = 0;
+    let bestScore = 0;
+    let misses = 0;
+    let isGameOver = false;
+    let trampolineLane = 1; 
+    let people = [];
+    
+    // TICK SYSTEM (Replaces smooth physics)
+    let tickAccumulator = 0;
+    let tickRate = 400; // Starting speed in ms (lower = faster)
+    let spawnCounter = 0;
+    let spawnInterval = 4; // Spawn a person every X ticks
+
+    // --- INPUT ---
+    window.addEventListener('keydown', (e) => {
+        if (isGameOver) {
+            if (e.key === 'Enter' || e.key === ' ') resetGame();
+            return;
+        }
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+            if (trampolineLane > 0) trampolineLane--;
+        } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+            if (trampolineLane < 2) trampolineLane++;
+        }
+    });
+
+    // --- DISCRETE TICK LOGIC ---
+    function tick() {
+        if (isGameOver) return;
+
+        // Spawning logic based on ticks
+        spawnCounter++;
+        if (spawnCounter >= spawnInterval) {
+            people.push({ phase: 0, step: 0, state: 'active' });
+            spawnCounter = 0;
+        }
+
+        // Update all people
+        for (let i = people.length - 1; i >= 0; i--) {
+            let p = people[i];
+            
+            if (p.state === 'active') {
+                p.step++; // Move to next discrete frame
+
+                // Check if phase is complete
+                if (p.step >= STEPS_PER_PHASE) {
+                    p.step = 0;
+                    p.phase++;
+
+                    // TRAMPOLINE CHECKS (Happens exactly when they land on a trampoline)
+                    if (p.phase === 1 && trampolineLane !== 0) p.state = 'miss';
+                    if (p.phase === 2 && trampolineLane !== 1) p.state = 'miss';
+                    if (p.phase === 3 && trampolineLane !== 2) p.state = 'miss';
+
+                    // Check if they reached the ambulance
+                    if (p.phase > 3) {
+                        score++;
+                        scoreEl.innerText = score;
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestEl.innerText = bestScore;
+                        }
+                        p.state = 'saved';
+                        
+                        // ACCELERATE: Make the game faster as score increases
+                        if (tickRate > 100) tickRate -= 10; 
+                        if (spawnInterval > 2 && score % 3 === 0) spawnInterval--;
+                    }
+                }
+            } 
+            else if (p.state === 'miss') {
+                // Miss animation: just fall straight down in discrete steps
+                p.step++;
+                if (p.step >= 3) {
+                    misses++;
+                    missesEl.innerText = misses;
+                    p.state = 'dead';
+                    if (misses >= MAX_MISSES) endGame();
+                }
+            }
+
+            // Cleanup
+            if (p.state === 'saved' || p.state === 'dead') {
+                people.splice(i, 1);
+            }
+        }
+    }
+
+    // --- RENDERING (No interpolation, just snapping to grid) ---
+    function draw() {
+        // Clear screen
+        ctx.fillStyle = '#9ea792'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Building
+        ctx.fillStyle = '#c0392b'; 
+        ctx.fillRect(0, 0, 100, GROUND_Y);
+        ctx.fillStyle = '#2c3e50';
+        for(let i=0; i<5; i++) ctx.fillRect(20, 60 + i*80, 60, 40);
+
+        // Draw Ambulance
+        ctx.fillStyle = '#ecf0f1'; 
+        ctx.fillRect(680, GROUND_Y - 80, 120, 80);
+        ctx.fillStyle = '#e74c3c'; 
+        ctx.fillRect(730, GROUND_Y - 50, 20, 20);
+        ctx.fillRect(720, GROUND_Y - 60, 40, 10);
+
+        // Draw Ground
+        ctx.fillStyle = '#7f8c8d';
+        ctx.fillRect(0, GROUND_Y, canvas.width, 10);
+        
+        // Draw Trampoline (Snaps to lane)
+        ctx.fillStyle = '#2980b9'; 
+        let trampX = LANES[trampolineLane] - 60; 
+        ctx.fillRect(trampX, TRAMPOLINE_Y, 120, 20);
+        ctx.fillRect(trampX + 20, TRAMPOLINE_Y + 20, 10, 20);
+        ctx.fillRect(trampX + 90, TRAMPOLINE_Y + 20, 10, 20);
+
+        // Draw People (Snapping to discrete positions)
+        for (let p of people) {
+            let pos;
+            
+            if (p.state === 'active') {
+                pos = getTrajectory(p.phase, p.step);
+            } else if (p.state === 'miss') {
+                // Discrete falling for miss
+                pos = { x: LANES[p.phase === 1 ? 0 : p.phase === 2 ? 1 : 2], y: TRAMPOLINE_Y + (p.step * 30), rot: p.step * Math.PI/2 };
+            }
+
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+            ctx.rotate(pos.rot);
+
+            // Draw "Person" as a simple blocky shape
+            ctx.fillStyle = '#111'; // Black LCD segment style
+            ctx.fillRect(-10, -15, 20, 30); // Body
+            ctx.fillRect(-5, -25, 10, 10);  // Head
+            ctx.fillRect(-18, -5, 8, 10);   // Left Arm
+            ctx.fillRect(10, -5, 8, 10);    // Right Arm
+
+            ctx.restore();
+        }
+
+        if (isGameOver) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '40px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 20);
+            ctx.font = '20px Courier New';
+            ctx.fillText('Press SPACE to restart', canvas.width/2, canvas.height/2 + 20);
+        }
+    }
+
+    // --- GAME LOOP (Tick based) ---
+    let lastTime = 0;
+    function gameLoop(time) {
+        let dt = time - lastTime;
+        lastTime = time;
+
+        // Accumulate time and trigger discrete ticks
+        tickAccumulator += dt;
+        while (tickAccumulator >= tickRate) {
+            tick();
+            tickAccumulator -= tickRate;
+        }
+
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function endGame() { isGameOver = true; }
+
+    function resetGame() {
+        score = 0; misses = 0; isGameOver = false;
+        trampolineLane = 1; people = []; tickAccumulator = 0;
+        tickRate = 400; spawnCounter = 0; spawnInterval = 4;
+        scoreEl.innerText = score; missesEl.innerText = misses;
+    }
+
+    requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

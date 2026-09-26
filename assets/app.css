@@ -371,6 +371,98 @@ input[type="color"] {
   box-shadow: 0 0 0 2px var(--page) inset;
 }
 
+/* ---------- Page links ---------- */
+.site-nav {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.site-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--card-2);
+}
+
+.site-nav a[aria-current="page"] {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+/* ---------- Credits bubble ---------- */
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.credits-wrap {
+  position: relative;
+  flex: none;
+}
+
+.credit-chip {
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.credit-chip[aria-expanded="true"] {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+.credits-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 10;
+  width: min(300px, 80vw);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.credits-pop::before {
+  content: '';
+  position: absolute;
+  right: 18px;
+  top: -6px;
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  background: var(--card-2);
+  border-left: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+}
+
+.credits-pop a {
+  color: var(--text);
+}
+
+.credit-meta {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 /* Cards */
 .grid {
   display: grid;
@@ -381,7 +473,8 @@ input[type="color"] {
 .card {
   background: var(--card);
   border-radius: var(--radius);
-  overflow: hidden;
+  /* Not hidden: the Credits bubble may reach past the card. The preview clips itself. */
+  overflow: visible;
   display: flex;
   flex-direction: column;
 }
@@ -764,5 +857,17 @@ section.help strong {
 
   .desc {
     margin-top: -6px;
+  }
+}
+
+/* The card no longer clips, so its preview rounds its own corners. */
+.card > .preview {
+  border-radius: var(--radius) var(--radius) 0 0;
+  overflow: hidden;
+}
+
+@media (orientation: landscape) and (max-height: 620px) {
+  .card > .preview {
+    border-radius: var(--radius) 0 0 var(--radius);
   }
 }

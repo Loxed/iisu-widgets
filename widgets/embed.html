@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>External Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+  /* Shows a page that already lives online (see assets/external.js).
+     The page is laid out at a fixed "viewport" width, then scaled down to the widget,
+     so pages made for a full screen keep their proportions on a 198 px tile. */
+  #root {
+    padding: 0;
+    overflow: hidden;
+    background: var(--embed-bg, #000000);
+  }
+
+  #site {
+    position: absolute;
+    left: 0;
+    top: 0;
+    border: 0;
+    transform-origin: 0 0;
+    background: transparent;
+  }
+
+  #msg {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 8cqmin;
+    color: #ffffff;
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <iframe id="site" title="External widget" allow="autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
+  <div id="msg" class="hint"></div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script>
+(function () {
+  var cfg = W.config({
+    src: '',               // address of the page to show, with its own settings in the query string
+    viewport: 1024,        // width (px) the page is laid out at before being scaled to the widget
+    background: '#000000'  // shown around and behind the page
+  });
+
+  var root = W.$('root');
+  var frame = W.$('site');
+  root.style.setProperty('--embed-bg', cfg.background);
+
+  if (!/^https?:\/\//.test(cfg.src)) {
+    W.$('msg').textContent = 'No page set for this widget.';
+    frame.style.display = 'none';
+    return;
+  }
+  if (navigator.onLine === false) {
+    W.$('msg').textContent = 'This widget needs an internet connection.';
+  }
+
+  function fit() {
+    var w = root.clientWidth;
+    var h = root.clientHeight;
+    if (!w || !h) {
+      return;
+    }
+    var s = w / Math.max(100, cfg.viewport);
+    frame.style.width = (w / s) + 'px';
+    frame.style.height = (h / s) + 'px';
+    frame.style.transform = 'scale(' + s + ')';
+  }
+
+  fit();
+  frame.src = cfg.src;
+  frame.addEventListener('load', function () {
+    W.$('msg').textContent = '';
+  });
+  window.addEventListener('resize', fit);
+})();
+</script>
+</body>
+</html>

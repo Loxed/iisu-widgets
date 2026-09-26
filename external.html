@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iiSU Widgets: External</title>
+<meta name="description" content="Widgets made by other people that already live online, ready to add to the iiSU launcher.">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body data-page="external">
+<main>
+  <nav class="site-nav" aria-label="Pages">
+    <a href="index.html">Widgets</a>
+    <a href="external.html" aria-current="page">External</a>
+  </nav>
+
+  <header class="top">
+    <h1>External widgets</h1>
+    <p class="lede">Pages other people made that already live online, catalogued here with credit to their authors. Set them up, then download a small file for iiSU that shows the page at the right size. They need an internet connection.</p>
+  </header>
+
+  <div class="bar">
+    <div class="field-inline">
+      <span>Preview</span>
+      <div class="seg" id="view-seg"></div>
+    </div>
+  </div>
+
+  <div id="cards"></div>
+
+  <section class="help">
+    <h2>How these work</h2>
+    <ul>
+      <li><strong>Download</strong> gives a small .html file that loads the page and scales it to the widget, so a page made for a full screen still fits a 198 px tile.</li>
+      <li><strong>Copy link</strong> gives the page's own address with your settings, for apps that take a URL.</li>
+      <li><strong>Credits</strong> on each card links to the author and the source. Everything here belongs to its authors.</li>
+      <li>Know a page that would make a good widget? Add it to <code>assets/external.js</code>.</li>
+    </ul>
+  </section>
+</main>
+
+<script src="widgets/shared/fonts.js"></script>
+<script src="assets/external.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

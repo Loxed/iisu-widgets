@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DVD Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+  #root {
+    gap: 4cqmin;
+  }
+
+  :root.tilt #root > * {
+    --depth: 0;
+  }
+
+  #scores {
+    display: flex;
+    gap: 5cqmin;
+  }
+
+  #score {
+    display: none;
+  }
+
+  #stage {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+  }
+
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    #root {
+      padding: 5cqmin 8cqmin;
+    }
+
+    #score {
+      display: inline;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <header class="row">
+    <span class="title">DVD</span>
+    <span id="scores" class="label"><span id="score">Corners 0</span></span>
+  </header>
+  <div id="stage">
+    <canvas id="board"></canvas>
+  </div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script src="shared/input.js" data-inline></script>
+<script src="shared/sound.js" data-inline></script>
+<script>
+(function () {
+  // DVD screensaver: the logo drifts and bounces off the edges.
+  // It keeps going forever, even on the small tile; a corner hit is counted.
+  //
+  // --- ASSET SHEET ---------------------------------------------------------
+  // The logo is currently a dashed placeholder box drawn by drawAsset().
+  // Native size: 72 x 32 px (the classic DVD logo proportions). It is drawn at
+  // logoScale times the cell size and scales with the widget.
+  //
+  //   name   size          frames / notes
+  //   logo   72 x 32 px     1 frame, the DVD Video logo
+  // -------------------------------------------------------------------------
+
+  var cfg = W.config({
+    speed: 'normal',  // slow, normal or fast (pixels per second at 1x)
+    color: 'theme',   // theme (use the widget colors) or classic (DVD blue)
+    corners: true,    // flash and count corner hits
+    sound: false
+  });
+
+  var SPEEDS = { slow: 40, normal: 80, fast: 140 };   // px/s at 1x (tile width)
+  var BEST_KEY = 'dvd:corners';
+  var canvas = W.$('board');
+  var ctx = canvas.getContext('2d');
+
+  var w = 0, h = 0, dpr = 1;
+  var x = 0, y = 0;          // logo position, fraction from top left
+  var vx = 1, vy = 1;         // direction, sign flips on bounce
+  var logoW = 0, logoH = 0;   // px on screen
+  var flash = 0;
+  var corners = W.store.get(BEST_KEY) || 0;
+  var last = 0;
+  var colors = {};
+
+  function readColors() {
+    var cs = getComputedStyle(document.documentElement);
+    colors.fg = cs.getPropertyValue('--fg').trim() || '#fff';
+    colors.subtle = cs.getPropertyValue('--subtle').trim() || '#999';
+    colors.classic = '#200ae6';
+  }
+
+  function blip(f, d) {
+    if (cfg.sound) {
+      Sound.blip(f, d, 0.3);
+    }
+  }
+
+  function layout() {
+    var stage = W.$('stage');
+    w = stage.clientWidth;
+    h = stage.clientHeight;
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Logo is 72x32 natively; scale it with the widget (a bit over a quarter
+    // of the smaller side, so it stays visible on the tile).
+    var s = Math.min(w, h);
+    logoW = s * 0.3;
+    logoH = logoW * 32 / 72;
+    draw();
+  }
+
+  // Placeholder art. Replace with the DVD logo pixel art / spritesheet blit.
+  function drawLogo(px, py) {
+    ctx.globalAlpha = 0.9;
+    if (flash > 0) {
+      ctx.strokeStyle = '#ff4d4d';
+    } else {
+      ctx.strokeStyle = cfg.color === 'classic' ? colors.classic : colors.fg;
+    }
+    ctx.lineWidth = 1;
+    ctx.setLineDash([Math.max(2, logoW * 0.05)]);
+    ctx.strokeRect(px + 0.5, py + 0.5, logoW - 1, logoH - 1);
+    ctx.setLineDash([]);
+    if (logoW > 40) {
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.font = Math.max(6, logoW * 0.12) + 'px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('logo', px + logoW / 2, py + logoH / 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+    drawLogo(x * (w - logoW), y * (h - logoH));
+    if (cfg.corners && flash > 0) {
+      ctx.globalAlpha = 0.35 + 0.4 * (flash / 30);
+      ctx.fillStyle = '#ff4d4d';
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function updateScores() {
+    W.$('score').textContent = 'Corners ' + corners;
+  }
+
+  function loop(t) {
+    if (!last) {
+      last = t;
+    }
+    var dt = Math.min(0.1, (t - last) / 1000);
+    last = t;
+    // Speed is relative to the tile size so it feels the same at any scale.
+    var sp = SPEEDS[cfg.speed] / 198;
+    x += vx * sp * dt;
+    y += vy * sp * dt;
+    var hitX = false, hitY = false;
+    if (x <= 0) { x = 0; vx = 1; hitX = true; }
+    if (x >= 1) { x = 1; vx = -1; hitX = true; }
+    if (y <= 0) { y = 0; vy = 1; hitY = true; }
+    if (y >= 1) { y = 1; vy = -1; hitY = true; }
+    if (hitX && hitY) {
+      corners++;
+      W.store.set(BEST_KEY, corners);
+      flash = 30;
+      blip(1200, 0.1);
+      updateScores();
+    }
+    if (flash > 0) {
+      flash--;
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // A random starting position and direction, like a real screensaver.
+  x = 0.2 + Math.random() * 0.5;
+  y = 0.2 + Math.random() * 0.5;
+  if (Math.random() < 0.5) { vx = -1; }
+  if (Math.random() < 0.5) { vy = -1; }
+
+  readColors();
+  layout();
+  updateScores();
+  window.addEventListener('resize', layout);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(layout);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

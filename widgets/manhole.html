@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manhole Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+  #root {
+    gap: 4cqmin;
+  }
+
+  :root.tilt #root > * {
+    --depth: 0;
+  }
+
+  #scores {
+    display: flex;
+    gap: 5cqmin;
+  }
+
+  #score {
+    display: none;
+  }
+
+  #stage {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+  }
+
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2cqmin;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  #overlay .big {
+    font-size: 11cqmin;
+    font-weight: 600;
+  }
+
+  #overlay .small {
+    font-size: 5.5cqmin;
+    color: var(--muted);
+  }
+
+  #overlay.hidden {
+    display: none;
+  }
+
+  #overlay .box {
+    padding: 3cqmin 6cqmin;
+    border-radius: 4cqmin;
+    background: var(--bg);
+    box-shadow: 0 1cqmin 4cqmin rgba(0, 0, 0, 0.2);
+  }
+
+  :root[data-theme="transparent"] #overlay .box {
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    #root {
+      padding: 5cqmin 8cqmin;
+    }
+
+    #score {
+      display: inline;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <header class="row">
+    <span class="title">Manhole</span>
+    <span id="scores" class="label"><span id="score">Score 0</span><span id="best">Best 0</span></span>
+  </header>
+  <div id="stage">
+    <canvas id="board"></canvas>
+    <div id="overlay"><div class="box"><div class="big" id="msg-big"></div><div class="small" id="msg-small"></div></div></div>
+  </div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script src="shared/input.js" data-inline></script>
+<script src="shared/sound.js" data-inline></script>
+<script>
+(function () {
+  // Game & Watch Manhole: walkers cross a path with four open manholes.
+  // You hold the lid over one hole at a time; anyone who steps on an open
+  // hole falls in. One point per walker who makes it across. Three falls = over.
+  //
+  // --- ASSET SHEET ---------------------------------------------------------
+  // All sizes are in grid cells. The grid is 20 x 10.
+  // Every sprite is currently a dashed placeholder box drawn by drawAsset().
+  // To add pixel art: draw inside the box passed to drawAsset, using name and
+  // frame to pick the sprite.
+  //
+  //   name     size         frames / notes
+  //   path     20.0 x 2.4   the walkway strip in the middle, background
+  //   hole     2.4 x 1.8    an open manhole (drawn 4 times, dark)
+  //   lid      2.4 x 1.0    the lid, drawn over the covered hole
+  //   walker   1.1 x 1.6    frames: 'walk-l', 'walk-r' (two-step animation)
+  //   tunnel   3.0 x 1.6    under each hole, drawn when the lid is elsewhere
+  //   miss     0.9 x 0.9    one shown per miss (max 3), top right
+  // -------------------------------------------------------------------------
+
+  var cfg = W.config({
+    speed: 'normal',   // slow, normal or fast (walker speed)
+    sound: true
+  });
+
+  var SPEEDS = { slow: 0.24, normal: 0.3, fast: 0.38 };
+  var COLS = 20, ROWS = 10;
+  var PATH_Y = 5.2;                 // top of the path strip
+  var PATH_H = 2.4;
+  var HOLES = [3, 7.5, 12, 16.5];   // hole centers, in cells
+  var HOLE_W = 2.4;
+  var WALK_Y = 3.6;                 // top of a walker sprite (feet on the path)
+  var W_W = 1.1, W_H = 1.6;
+
+  var BEST_KEY = 'manhole:best';
+  var canvas = W.$('board');
+  var ctx = canvas.getContext('2d');
+
+  var cell = 10, offX = 0, offY = 0;
+  var walkers = [];
+  var lid = 1;           // index into HOLES
+  var spawnTimer = 16;
+  var score = 0;
+  var misses = 0;
+  var best = W.store.get(BEST_KEY) || 0;
+  var state = 'ready';   // ready, playing, paused, over
+  var lastTick = 0;
+  var colors = {};
+
+  function readColors() {
+    var cs = getComputedStyle(document.documentElement);
+    colors.fg = cs.getPropertyValue('--fg').trim() || '#fff';
+    colors.subtle = cs.getPropertyValue('--subtle').trim() || '#999';
+  }
+
+  function blip(f, d) {
+    if (cfg.sound) {
+      Sound.blip(f, d, 0.3);
+    }
+  }
+
+  function layout() {
+    var stage = W.$('stage');
+    var w = stage.clientWidth;
+    var h = stage.clientHeight;
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cell = Math.min(w / COLS, h / ROWS);
+    offX = (w - cell * COLS) / 2;
+    offY = (h - cell * ROWS) / 2;
+    draw();
+  }
+
+  // Placeholder art. Replace the drawing inside with pixel art:
+  // x, y, w, h are the sprite box in pixels, name picks the sprite,
+  // frame picks the animation frame (null when the sprite has one frame).
+  function drawAsset(name, gx, gy, gw, gh, frame) {
+    var x = offX + gx * cell;
+    var y = offY + gy * cell;
+    var w = gw * cell;
+    var h = gh * cell;
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = colors.subtle;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([Math.max(2, cell * 0.14)]);
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.setLineDash([]);
+    if (cell > 13) {
+      ctx.fillStyle = colors.subtle;
+      ctx.font = Math.max(6, cell * 0.2) + 'px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(frame ? name + ':' + frame : name, x + w / 2, y + h / 2);
+    }
+  }
+
+  function spawn() {
+    var fromLeft = Math.random() < 0.5;
+    var speed = SPEEDS[cfg.speed] + Math.random() * 0.1;
+    walkers.push({
+      x: fromLeft ? -1.2 : COLS + 0.1,
+      vx: fromLeft ? speed : -speed,
+      step: 0
+    });
+  }
+
+  function addMiss() {
+    misses++;
+    blip(110, 0.35);
+    if (misses >= 3) {
+      if (score > best) {
+        best = score;
+        W.store.set(BEST_KEY, best);
+      }
+      setState('over');
+    }
+  }
+
+  function tick() {
+    for (var i = walkers.length - 1; i >= 0; i--) {
+      var wk = walkers[i];
+      wk.x += wk.vx;
+      wk.step++;
+      // Reached the far side: safe.
+      if (wk.x > COLS + 1.1 || wk.x < -1.2) {
+        walkers.splice(i, 1);
+        score++;
+        blip(770, 0.04);
+        updateScores();
+        continue;
+      }
+      // Stepping on an open hole?
+      for (var hi = 0; hi < HOLES.length; hi++) {
+        if (Math.abs(wk.x - HOLES[hi]) < HOLE_W / 2 - 0.3) {
+          if (hi !== lid) {
+            walkers.splice(i, 1);
+            addMiss();
+          }
+          break;
+        }
+      }
+    }
+    spawnTimer--;
+    if (spawnTimer <= 0 && walkers.length < 4 && state === 'playing') {
+      spawn();
+      spawnTimer = Math.max(9, 18 - Math.floor(score / 3));
+    }
+  }
+
+  function draw() {
+    var w = canvas.width / (window.devicePixelRatio || 1);
+    var h = canvas.height / (window.devicePixelRatio || 1);
+    ctx.clearRect(0, 0, w, h);
+
+    // Path.
+    drawAsset('path', 0, PATH_Y, COLS, PATH_H, null);
+
+    // Holes: covered by the lid, or open with the tunnel below.
+    HOLES.forEach(function (cx, hi) {
+      if (hi === lid) {
+        drawAsset('lid', cx - HOLE_W / 2, PATH_Y + 0.2, HOLE_W, 1.0, null);
+      } else {
+        drawAsset('hole', cx - HOLE_W / 2, PATH_Y + 0.4, HOLE_W, 1.8, null);
+        drawAsset('tunnel', cx - HOLE_W / 2 - 0.3, PATH_Y + PATH_H, HOLE_W + 0.6, 1.6, null);
+      }
+    });
+
+    // Walkers. Two-frame walk cycle, frame flips every few ticks.
+    walkers.forEach(function (wk) {
+      var frame = (wk.vx > 0 ? 'walk-r' : 'walk-l') + (((wk.step >> 2) & 1) ? '-b' : '-a');
+      drawAsset('walker', wk.x - W_W / 2, WALK_Y, W_W, W_H, frame);
+    });
+
+    // Misses, top right.
+    for (var m = 0; m < misses; m++) {
+      drawAsset('miss', COLS - 1.2 - m, 0.3, 0.9, 0.9, null);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function updateScores() {
+    W.$('score').textContent = 'Score ' + score;
+    W.$('best').textContent = 'Best ' + best;
+  }
+
+  function setState(s) {
+    state = s;
+    var focused = Input.isFocusedView();
+    var big = '';
+    var small = '';
+    if (!focused) {
+      big = '';
+      small = 'Focus to play';
+    } else if (s === 'ready') {
+      big = 'Manhole';
+      small = 'Press A or tap to start';
+    } else if (s === 'paused') {
+      big = 'Paused';
+      small = 'Press A to continue';
+    } else if (s === 'over') {
+      big = 'Score ' + score;
+      small = (score >= best && score > 0 ? 'New best! ' : '') + 'Press A to play again';
+    }
+    W.$('msg-big').textContent = big;
+    W.$('msg-big').style.display = big ? '' : 'none';
+    W.$('msg-small').textContent = small;
+    W.$('overlay').classList.toggle('hidden', s === 'playing');
+    updateScores();
+  }
+
+  function reset() {
+    walkers = [];
+    lid = 1;
+    score = 0;
+    misses = 0;
+    spawnTimer = 16;
+    setState('ready');
+  }
+
+  function loop(t) {
+    if (state === 'playing') {
+      if (!Input.isFocusedView() || document.visibilityState !== 'visible') {
+        setState('paused');
+      } else if (t - lastTick >= 55) {
+        lastTick = t;
+        tick();
+        draw();
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+
+  Input.on(function (a) {
+    if (!Input.isFocusedView()) {
+      return;
+    }
+    if (a.type === 'a') {
+      if (state === 'over') {
+        reset();
+      }
+      if (state !== 'playing') {
+        setState('playing');
+        lastTick = performance.now();
+      }
+    } else if (a.type === 'start') {
+      setState(state === 'playing' ? 'paused' : 'playing');
+    } else if (a.type === 'dir') {
+      if (a.dir === 'left') {
+        lid = Math.max(0, lid - 1);
+      } else if (a.dir === 'right') {
+        lid = Math.min(HOLES.length - 1, lid + 1);
+      }
+      if (state === 'ready') {
+        setState('playing');
+        lastTick = performance.now();
+      }
+    }
+  });
+
+  readColors();
+  layout();
+  setState('ready');
+  window.addEventListener('resize', function () {
+    layout();
+    if (state !== 'playing') {
+      setState(state);
+    }
+  });
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(layout);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

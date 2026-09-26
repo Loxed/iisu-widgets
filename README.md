@@ -29,6 +29,7 @@ To publish: push to GitHub, then go to Settings > Pages and deploy from the `mai
 | Path | What it is |
 |---|---|
 | `index.html`, `assets/` | The configurator |
+| `external.html`, `assets/external.js` | Catalog of external widgets (pages that already live online) |
 | `widgets/*.html` | One file per widget |
 | `widgets/shared/base.css` | Themes and shared styles (sizes in `cqmin`, so a widget scales with its tile) |
 | `widgets/shared/runtime.js` | Settings, theme, font, storage, network helpers |
@@ -61,6 +62,12 @@ Widgets can also react to a resize with `W.onResize(function (size) { ... })`.
 `widgets/ds.html` wraps the `<ds-clock>` and `<ds-calendar>` web components from [ds.css](https://github.com/spiritov/ds.css) by spiritov (MIT, see `widgets/vendor/ds/LICENSE`). The components have a fixed pixel size (clock 198×198, calendar 234×226); the widget scales them to fit, in half steps when "crisp pixels" is on. Their fonts are Latin subsets in woff2: `fonts/ds-clock.woff2` ("Nintendo DS - Clock Numbers Font" by zigaudrey, FontStruct Non-Commercial License) and `fonts/ds-system.woff2` (the Nitro DS font).
 
 On download, stylesheets marked `data-inline` get their `url(...)` files (fonts, images) embedded, and `type="module"` scripts stay modules.
+
+## External widgets and credits
+
+`external.html` catalogs pages other people made that already live online (for example the [DVD screensaver](https://github.com/bemxio/dvd-screensaver) by bemxio). They are listed in `assets/external.js`: address, options passed in the page's own query string, and credits. Their cards use `widgets/embed.html`, which lays the page out at a fixed width (`viewport`, 1024 px by default) and scales it down to the widget, so a page made for a full screen fits a 198 px tile. A download is a small file that loads the page, so it needs an internet connection.
+
+Any card can show a **Credits** bubble: add `credits: [{ name, by, url, byUrl, license, note }]` to its entry in `assets/app.js` or `assets/external.js`.
 
 ## Fonts
 

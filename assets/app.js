@@ -51,6 +51,10 @@
       group: 'essentials',
       name: 'Weather',
       desc: 'Current weather, today\'s range and a 5-day forecast in the focused view. Bold takes its colors from the weather.',
+      credits: [
+        { name: 'Open-Meteo', url: 'https://open-meteo.com/', license: 'CC BY 4.0', note: 'weather data' },
+        { name: 'GeoJS', url: 'https://www.geojs.io/', note: 'automatic location' }
+      ],
       options: [
         { key: 'style', label: 'Style', type: 'seg', def: 'classic', choices: [['classic', 'Classic'], ['bold', 'Bold'], ['card', 'Card']] },
         { key: 'location', label: 'Location', type: 'seg', def: 'ip', choices: [['ip', 'Automatic'], ['fixed', 'Choose a city']] },
@@ -77,6 +81,11 @@
       group: 'essentials',
       name: 'DS clock and calendar',
       desc: 'The Nintendo DS clock and calendar, recreated by ds.css. Auto shows the clock on the tile and both when focused.',
+      credits: [
+        { name: 'ds.css', by: 'spiritov', url: 'https://github.com/spiritov/ds.css', license: 'MIT', note: 'clock and calendar components' },
+        { name: 'Nintendo DS - Clock Numbers Font', by: 'zigaudrey', license: 'FontStruct Non-Commercial', note: 'clock numbers' },
+        { name: 'Nitro DS font', note: 'calendar text, shipped with ds.css' }
+      ],
       options: [
         { key: 'show', label: 'Show', type: 'seg', def: 'auto', choices: [['auto', 'Auto'], ['clock', 'Clock'], ['calendar', 'Calendar'], ['both', 'Both']] },
         { key: 'color', label: 'Favorite color', type: 'colors', def: '#30baf3', choices: DS_COLORS },
@@ -156,8 +165,66 @@
       options: [
         { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
       ]
+    },
+    {
+      id: 'fire',
+      group: 'games',
+      name: 'Fire',
+      desc: 'Game & Watch classic: bounce the jumpers off the trampoline into the ambulance. Three misses and it is over.',
+      credits: [
+        { name: 'Game & Watch: Fire', by: 'Nintendo', note: 'original game (1980)' }
+      ],
+      options: [
+        { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
+        { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
+      ]
+    },
+    {
+      id: 'chef',
+      group: 'games',
+      name: 'Chef',
+      desc: 'Catch the flying food on your plate stack before it hits the wall. Three misses and it is over.',
+      credits: [
+        { name: 'Game & Watch: Chef', by: 'Nintendo', note: 'original game (1981)' }
+      ],
+      options: [
+        { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
+        { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
+      ]
+    },
+    {
+      id: 'manhole',
+      group: 'games',
+      name: 'Manhole',
+      desc: 'Keep the lid over the open manholes as walkers cross the path. Three falls and it is over.',
+      credits: [
+        { name: 'Game & Watch: Manhole', by: 'Nintendo', note: 'original game (1981)' }
+      ],
+      options: [
+        { key: 'speed', label: 'Walker speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
+        { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
+      ]
     }
+    // {
+    //   id: 'dvd',
+    //   group: 'decor',
+    //   name: 'DVD',
+    //   desc: 'The screensaver. The logo drifts and bounces forever, and counts corner hits.',
+    //   options: [
+    //     { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
+    //     { key: 'color', label: 'Logo color', type: 'seg', def: 'theme', choices: [['theme', 'Theme'], ['classic', 'DVD blue']] },
+    //     { key: 'corners', label: 'Corner flash', type: 'switch', def: true },
+    //     { key: 'sound', label: 'Sound on corner', type: 'switch', def: false }
+    //   ]
+    // }
   ];
+
+  // external.html lists pages that already live online instead of our own widgets.
+  var IS_EXTERNAL = document.body.getAttribute('data-page') === 'external';
+  if (IS_EXTERNAL) {
+    WIDGETS = window.EXTERNAL_WIDGETS || [];
+    GROUPS = window.EXTERNAL_GROUPS || [];
+  }
 
   var SAVE_KEY = 'iisu-configurator';
   var DEFAULT_FONT = 'cal-sans';
@@ -253,8 +320,30 @@
     });
   }
 
+  // Address of an external page, with its options in its own query string.
+  function siteUrl(w) {
+    var s = state.widgets[w.id];
+    var params = [];
+    w.options.forEach(function (o) {
+      if (!o.param || s[o.key] === o.def) {
+        return;
+      }
+      var v = o.type === 'switch' ? (s[o.key] ? '1' : (o.off || '0')) : s[o.key];
+      params.push(encodeURIComponent(o.param) + '=' + encodeURIComponent(v));
+    });
+    return w.site + (params.length ? (w.site.indexOf('?') === -1 ? '?' : '&') + params.join('&') : '');
+  }
+
+  // The file in widgets/ a card uses: its own, or embed.html for external pages.
+  function fileFor(w) {
+    return w.site ? 'embed' : w.id;
+  }
+
   // Full settings for a widget: look (theme, font) plus the widget's own options.
   function settingsFor(w, forPreview) {
+    if (w.site) {
+      return { resize: state.resize, src: siteUrl(w), viewport: w.viewport || 1024, background: w.background || '#000000' };
+    }
     var cfg = { theme: state.theme, font: currentFont(), resize: state.resize };
     if (state.tilt) {
       cfg.tilt = true;
@@ -292,7 +381,11 @@
     }).join('&');
   }
 
+  // External pages are linked directly; our widgets carry their settings in the link.
   function widgetUrl(w) {
+    if (w.site) {
+      return siteUrl(w);
+    }
     return new URL('widgets/' + w.id + '.html?' + query(w), location.href).href;
   }
 
@@ -301,7 +394,7 @@
   function refreshPreview(w) {
     var f = frames[w.id];
     if (f) {
-      f.src = 'widgets/' + w.id + '.html?' + query(w, true);
+      f.src = 'widgets/' + fileFor(w) + '.html?' + query(w, true);
     }
   }
 
@@ -365,7 +458,7 @@
   // Builds one self-contained file: shared CSS/JS inlined, font embedded, settings written in.
   // Everything happens in the browser, so the site stays fully static.
   function buildFile(w) {
-    var pageUrl = new URL('widgets/' + w.id + '.html', location.href);
+    var pageUrl = new URL('widgets/' + fileFor(w) + '.html', location.href);
     return fetchText(pageUrl.href).then(function (html) {
       var parts = [];
       var re = /<link rel="stylesheet" href="([^"]+)" data-inline>|<script( type="module")? src="([^"]+)" data-inline><\/script>/g;
@@ -410,6 +503,9 @@
   }
 
   function fileName(w) {
+    if (w.site) {
+      return w.id.replace(/^ext-/, '') + '.html';
+    }
     return w.id + '-' + state.theme + (currentFont() !== DEFAULT_FONT ? '-' + currentFont() : '') + '.html';
   }
 
@@ -515,6 +611,57 @@
     ]);
   }
 
+  // "Credits" chip on a card, opening a small bubble that lists who made what.
+  // Entries: { name, by, url, byUrl, license, note }.
+  function creditsBubble(w) {
+    if (!w.credits || !w.credits.length) {
+      return null;
+    }
+    var wrap = el('div', { class: 'credits-wrap' });
+    var chip = el('button', { type: 'button', class: 'credit-chip', 'aria-expanded': 'false', text: 'Credits' });
+    var pop = el('div', { class: 'credits-pop hidden', role: 'dialog', 'aria-label': 'Credits for ' + w.name });
+    w.credits.forEach(function (c) {
+      var line = el('div', { class: 'credit-line' });
+      line.appendChild(c.url ? el('a', { href: c.url, target: '_blank', rel: 'noopener', text: c.name }) : el('strong', { text: c.name }));
+      if (c.by) {
+        line.appendChild(document.createTextNode(' by '));
+        line.appendChild(c.byUrl ? el('a', { href: c.byUrl, target: '_blank', rel: 'noopener', text: c.by }) : el('span', { text: c.by }));
+      }
+      var meta = [c.license, c.note].filter(Boolean).join(' · ');
+      if (meta) {
+        line.appendChild(el('span', { class: 'credit-meta', text: meta }));
+      }
+      pop.appendChild(line);
+    });
+    chip.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = pop.classList.contains('hidden');
+      document.querySelectorAll('.credits-pop').forEach(function (p) {
+        p.classList.add('hidden');
+      });
+      document.querySelectorAll('.credit-chip').forEach(function (c) {
+        c.setAttribute('aria-expanded', 'false');
+      });
+      pop.classList.toggle('hidden', !open);
+      chip.setAttribute('aria-expanded', String(open));
+    });
+    pop.addEventListener('click', function (e) {
+      e.stopPropagation();
+    });
+    wrap.appendChild(chip);
+    wrap.appendChild(pop);
+    return wrap;
+  }
+
+  document.addEventListener('click', function () {
+    document.querySelectorAll('.credits-pop').forEach(function (p) {
+      p.classList.add('hidden');
+    });
+    document.querySelectorAll('.credit-chip').forEach(function (c) {
+      c.setAttribute('aria-expanded', 'false');
+    });
+  });
+
   function buildCard(w) {
     var s = state.widgets[w.id];
     var frame = el('iframe', { title: w.name + ' preview', loading: 'lazy' });
@@ -601,7 +748,8 @@
 
     var card = el('article', { class: 'card' }, [
       el('div', { class: 'preview' }, [frame]),
-      el('div', { class: 'body' }, [el('h2', { text: w.name }), el('p', { class: 'desc', text: w.desc })].concat(rows).concat([el('div', { class: 'actions' }, [dl, cp])]))
+      el('div', { class: 'body' }, [el('div', { class: 'title-row' }, [el('h2', { text: w.name }), creditsBubble(w)]), el('p', { class: 'desc', text: w.desc })]
+        .concat(rows).concat([el('div', { class: 'actions' }, [dl, cp])]))
     ]);
 
     changed();
@@ -853,10 +1001,12 @@
     update(false);
   }
 
-  // Global controls
-  var customBox = document.getElementById('custom-panel');
-  buildColorPicker(customBox);
-  document.getElementById('theme-seg').replaceWith((function () {
+  // Global controls (external.html only has Preview).
+  var customBox = document.getElementById('custom-panel') || el('div');
+  if (document.getElementById('custom-panel')) {
+    buildColorPicker(customBox);
+  }
+  if (document.getElementById('theme-seg')) document.getElementById('theme-seg').replaceWith((function () {
     var seg = segmented(THEMES, state.theme, function (v) {
       state.theme = v;
       customBox.classList.toggle('hidden', v !== 'custom');
@@ -875,7 +1025,7 @@
   }).join('\n');
   document.head.appendChild(el('style', { text: fontCss }));
 
-  var fontNote = document.getElementById('font-note');
+  var fontNote = document.getElementById('font-note') || el('span');
   var fontSeg = segmented(Object.keys(FONTS).map(function (id) {
     return [id, FONTS[id].name];
   }), currentFont(), function (v) {
@@ -884,9 +1034,11 @@
     refreshAll();
   });
   fontSeg.id = 'font-seg';
-  document.getElementById('font-seg').replaceWith(fontSeg);
+  if (document.getElementById('font-seg')) {
+    document.getElementById('font-seg').replaceWith(fontSeg);
+  }
   // With a single font there is nothing to pick.
-  if (Object.keys(FONTS).length < 2) {
+  if (Object.keys(FONTS).length < 2 && document.getElementById('font-field')) {
     document.getElementById('font-field').classList.add('hidden');
   }
   fontNote.textContent = FONTS[currentFont()].note;
@@ -927,7 +1079,9 @@
     refreshAll();
   });
   resizeSeg.id = 'resize-seg';
-  document.getElementById('resize-seg').replaceWith(resizeSeg);
+  if (document.getElementById('resize-seg')) {
+    document.getElementById('resize-seg').replaceWith(resizeSeg);
+  }
 
   var cards = document.getElementById('cards');
   GROUPS.forEach(function (g) {
