@@ -665,6 +665,8 @@ var GW = (function () {
 
     function loop(now) {
       requestAnimationFrame(loop);
+      // iiSU's music is lowered while a game is being played (cfg.duck).
+      Sound.duck(cfg.duck !== false && real && phase !== 'paused' && phase !== 'over' && focused() && document.visibilityState === 'visible');
       if (document.visibilityState !== 'visible' || !g) {
         return;
       }

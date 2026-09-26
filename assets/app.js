@@ -180,7 +180,8 @@
         { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
         { key: 'ghosts', label: 'Faint background sprites', type: 'switch', def: true },
         { key: 'color', label: 'Color', type: 'switch', def: false },
-        { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
+        { key: 'sound', label: 'Sound effects', type: 'switch', def: true },
+        { key: 'duck', label: 'Lower iiSU music while playing', type: 'switch', def: true }
       ]
     },
     {
@@ -197,7 +198,8 @@
         { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
         { key: 'ghosts', label: 'Faint background sprites', type: 'switch', def: true },
         { key: 'color', label: 'Color', type: 'switch', def: false },
-        { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
+        { key: 'sound', label: 'Sound effects', type: 'switch', def: true },
+        { key: 'duck', label: 'Lower iiSU music while playing', type: 'switch', def: true }
       ]
     },
     {
@@ -214,7 +216,8 @@
         { key: 'speed', label: 'Speed', type: 'seg', def: 'normal', choices: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
         { key: 'ghosts', label: 'Faint background sprites', type: 'switch', def: true },
         { key: 'color', label: 'Color', type: 'switch', def: false },
-        { key: 'sound', label: 'Sound effects', type: 'switch', def: true }
+        { key: 'sound', label: 'Sound effects', type: 'switch', def: true },
+        { key: 'duck', label: 'Lower iiSU music while playing', type: 'switch', def: true }
       ]
     }
     // {

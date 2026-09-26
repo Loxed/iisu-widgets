@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Focus Test</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #15171c;
+    color: #f2f2f2;
+    font: 14px/1.3 system-ui, sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #root {
+    box-sizing: border-box;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 15px;
+  }
+
+  #buttons {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  button {
+    border: 0;
+    border-radius: 12px;
+    background: #2a2e37;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    padding: 6px;
+  }
+
+  button.on {
+    background: #3d7eff;
+  }
+
+  button small {
+    display: block;
+    font-weight: 400;
+    opacity: 0.7;
+    margin-top: 2px;
+  }
+
+  #stop {
+    grid-column: 1 / 3;
+    background: #5a2a2a;
+  }
+
+  #log {
+    height: 4.2em;
+    overflow: hidden;
+    font: 12px/1.4 ui-monospace, monospace;
+    opacity: 0.85;
+  }
+
+  /* Tile (198 x 198): buttons and one log line only. Open the widget for the full view. */
+  @media (max-height: 260px) {
+    #root {
+      gap: 5px;
+      padding: 6px;
+    }
+
+    h1, button small {
+      display: none;
+    }
+
+    button {
+      font-size: 12px;
+    }
+
+    #log {
+      height: 1.4em;
+      font-size: 10px;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <h1>Audio focus test: start iiSU music, then tap a test</h1>
+  <div id="buttons">
+    <button data-test="track">1. Audio track<small>quiet tone, audio element</small></button>
+    <button data-test="silent">2. Silent track<small>silence, audio element</small></button>
+    <button data-test="beeps">3. Beeps<small>Web Audio, like the games now</small></button>
+    <button data-test="bridge">4. Beeps via track<small>Web Audio into an audio element</small></button>
+    <button id="stop">Stop</button>
+  </div>
+  <div id="log"></div>
+</div>
+
+<script>
+// Checks whether sound from a web widget makes iiSU lower or pause its background music.
+// Android lowers or pauses other players when an app asks for "audio focus". Media elements
+// (<audio>) usually ask for it, Web Audio usually does not. Each button tries one way.
+(function () {
+  var lines = [];
+  var audio = null;
+  var ctx = null;
+  var beepTimer = null;
+  var current = null;
+  var started = 0;
+
+  function log(text) {
+    var t = started ? ((Date.now() - started) / 1000).toFixed(1) + 's ' : '';
+    lines.unshift(t + text);
+    lines = lines.slice(0, 3);
+    document.getElementById('log').textContent = lines.join('\n');
+    document.getElementById('log').style.whiteSpace = 'pre';
+    try {
+      console.log('[audio-test]', text);
+    } catch (e) {}
+  }
+
+  // A mono 16-bit WAV of `seconds`, a sine at `freq` Hz (0 for silence), as a blob address.
+  function wav(seconds, freq, volume) {
+    var rate = 22050;
+    var n = Math.floor(rate * seconds);
+    var buf = new ArrayBuffer(44 + n * 2);
+    var v = new DataView(buf);
+    function str(o, s) {
+      for (var i = 0; i < s.length; i++) {
+        v.setUint8(o + i, s.charCodeAt(i));
+      }
+    }
+    str(0, 'RIFF');
+    v.setUint32(4, 36 + n * 2, true);
+    str(8, 'WAVE');
+    str(12, 'fmt ');
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true);
+    v.setUint32(28, rate * 2, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    str(36, 'data');
+    v.setUint32(40, n * 2, true);
+    for (var i = 0; i < n; i++) {
+      var s = freq ? Math.sin(2 * Math.PI * freq * i / rate) * volume : 0;
+      v.setInt16(44 + i * 2, s * 32767, true);
+    }
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  }
+
+  function context() {
+    if (!ctx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC();
+    }
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    return ctx;
+  }
+
+  function beep(dest) {
+    var c = context();
+    var o = c.createOscillator();
+    var g = c.createGain();
+    o.type = 'square';
+    o.frequency.value = 880;
+    g.gain.setValueAtTime(0.06, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.12);
+    o.connect(g);
+    g.connect(dest || c.destination);
+    o.start();
+    o.stop(c.currentTime + 0.15);
+  }
+
+  function watch(el) {
+    ['play', 'playing', 'pause', 'ended', 'error', 'stalled'].forEach(function (ev) {
+      el.addEventListener(ev, function () {
+        log('audio element: ' + ev + (ev === 'pause' && current ? ' (paused by the system?)' : ''));
+      });
+    });
+  }
+
+  function playElement(src) {
+    audio = new Audio();
+    watch(audio);
+    audio.loop = true;
+    audio.src = src;
+    return audio.play().then(function () {
+      log('playing, is iiSU music lower?');
+    }).catch(function (e) {
+      log('play failed: ' + (e && e.name ? e.name : e));
+    });
+  }
+
+  function stop() {
+    current = null;
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      audio = null;
+    }
+    clearInterval(beepTimer);
+    beepTimer = null;
+    document.querySelectorAll('button[data-test]').forEach(function (b) {
+      b.classList.remove('on');
+    });
+  }
+
+  var TESTS = {
+    track: function () {
+      return playElement(wav(2, 440, 0.08));
+    },
+    silent: function () {
+      return playElement(wav(2, 0, 0));
+    },
+    beeps: function () {
+      beep();
+      beepTimer = setInterval(function () {
+        beep();
+      }, 600);
+      log('beeping, is iiSU music lower?');
+    },
+    bridge: function () {
+      var c = context();
+      if (!c.createMediaStreamDestination) {
+        log('no MediaStreamDestination here');
+        return;
+      }
+      var dest = c.createMediaStreamDestination();
+      audio = new Audio();
+      watch(audio);
+      audio.srcObject = dest.stream;
+      audio.play().then(function () {
+        log('beeping through an audio element');
+      }).catch(function (e) {
+        log('play failed: ' + (e && e.name ? e.name : e));
+      });
+      beep(dest);
+      beepTimer = setInterval(function () {
+        beep(dest);
+      }, 600);
+    }
+  };
+
+  document.querySelectorAll('button[data-test]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var name = b.getAttribute('data-test');
+      stop();
+      current = name;
+      started = Date.now();
+      b.classList.add('on');
+      log('start test ' + b.textContent.charAt(0));
+      TESTS[name]();
+    });
+  });
+  document.getElementById('stop').addEventListener('click', function () {
+    stop();
+    log('stopped, does the music come back?');
+  });
+  document.addEventListener('visibilitychange', function () {
+    log('page ' + document.visibilityState);
+  });
+  log('ready');
+})();
+</script>
+</body>
+</html>
