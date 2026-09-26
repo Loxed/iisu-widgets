@@ -28,6 +28,12 @@
     font-variant-numeric: tabular-nums;
   }
 
+  #hour small {
+    font-size: 0.38em;
+    margin-left: 0.12em;
+    letter-spacing: 0;
+  }
+
   #state {
     display: flex;
     align-items: center;
@@ -77,6 +83,13 @@
     display: none;
   }
 
+  #debug {
+    font: 3.6cqmin/1.35 ui-monospace, monospace;
+    color: var(--muted);
+    text-align: center;
+    word-break: break-word;
+  }
+
   #vol {
     height: 1.4cqmin;
     border-radius: 1cqmin;
@@ -120,7 +133,8 @@
     <div id="state"><span id="bars"><i></i><i></i><i></i></span><span id="status"></span></div>
   </div>
   <div id="vol" class="focus-only"><div id="vol-fill"></div></div>
-  <div class="hint focus-only">A or tap: play or pause · Left and right: game · Up and down: volume</div>
+  <div id="debug" style="display: none"></div>
+  <div class="hint focus-only" id="help">A or tap: play or pause · Left and right: game · Up and down: volume</div>
 </div>
 
 <script id="widget-config" type="application/json">{}</script>
@@ -141,8 +155,26 @@
     loopBlend: 8,      // seconds of overlap when a track loops (hides the fade at the end of a track)
     duck: true,        // lower iiSU's background music while this plays
     autoplay: true,    // start by itself (the web view may still want a tap first)
-    hours: '12'        // 12 or 24
+    hours: '12',       // 12 or 24
+    debug: false,      // test mode: shows what plays, up and down change the hour instead of the volume
+    cycle: 0,          // test mode: seconds per simulated hour (0: real time), to hear the hour changes
+    preview: false     // set by the configurator's preview: wait for a tap instead of playing by itself
   });
+
+  // ---------- Time (real, or shifted and fast-forwarded in test mode) ----------
+  var hourOffset = 0;
+  var cycleStart = Date.now();
+
+  function currentHour() {
+    var h = new Date().getHours();
+    if (cfg.debug) {
+      h += hourOffset;
+      if (cfg.cycle > 0) {
+        h += Math.floor((Date.now() - cycleStart) / (cfg.cycle * 1000));
+      }
+    }
+    return ((h % 24) + 24) % 24;
+  }
 
   var AC = window.AudioContext || window.webkitAudioContext;
   var ctx = null;
@@ -151,9 +183,10 @@
   var games = [];
   var game = cfg.game || W.store.get('music:game') || '';
   var volume = W.store.get('music:volume');
-  var paused = W.store.get('music:paused') === true || !cfg.autoplay;
+  var paused = W.store.get('music:paused') === true || !cfg.autoplay || cfg.preview;
   var loading = null;        // key being loaded
   var cache = {};            // key -> decoded buffer (the current and the next hour)
+  var names = {};            // key -> file name, shown in test mode
   var message = '';
 
   if (typeof volume !== 'number') {
@@ -168,8 +201,10 @@
   }
 
   function render() {
-    var h = new Date().getHours();
-    W.$('hour').textContent = hourLabel(h);
+    var h = currentHour();
+    // The AM/PM part is set smaller: Cal Sans' space is wide at this size.
+    var label = hourLabel(h).split(' ');
+    W.$('hour').innerHTML = label[0] + (label[1] ? '<small>' + label[1] + '</small>' : '');
     W.$('game').textContent = game || '';
     var playing = !!voice && !paused && ctx && ctx.state === 'running';
     document.documentElement.classList.toggle('playing', playing);
@@ -191,6 +226,28 @@
     }
     W.$('status').textContent = status;
     W.$('vol-fill').style.width = Math.round(volume * 100) + '%';
+    if (cfg.debug) {
+      renderDebug(h);
+    }
+  }
+
+  function mmss(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    return Math.floor(sec / 60) + ':' + ('0' + sec % 60).slice(-2);
+  }
+
+  // Test mode line: hour source, track, position in the loop, pass number.
+  function renderDebug(h) {
+    var parts = ['hour ' + h + (hourOffset ? ' (' + (hourOffset > 0 ? '+' : '') + hourOffset + ')' : '') + (cfg.cycle > 0 ? ', ' + cfg.cycle + ' s per hour' : '')];
+    if (voice && ctx) {
+      var pos = ctx.currentTime - (voice.passStart || 0);
+      parts.push('slot ' + voice.slot + ': ' + (names[voice.key] || voice.key));
+      parts.push(mmss(pos) + ' / ' + mmss(voice.buffer.duration) + ', pass ' + (voice.passes || 1));
+    } else {
+      parts.push(loading ? 'loading ' + loading : 'nothing playing');
+    }
+    parts.push('context ' + (ctx ? ctx.state : 'none'));
+    W.$('debug').textContent = parts.join(' · ');
   }
 
   // ---------- Audio ----------
@@ -224,6 +281,7 @@
       if (!t || !t.blob) {
         throw new Error('missing track ' + key);
       }
+      names[key] = t.name || key;
       return new Response(t.blob).arrayBuffer();
     }).then(function (data) {
       return new Promise(function (resolve, reject) {
@@ -247,6 +305,8 @@
     var d = v.buffer.duration;
     var blend = Math.min(cfg.loopBlend, d / 4);
     var t = v.next;
+    v.passStart = t;
+    v.passes = (v.passes || 0) + 1;
     var src = ctx.createBufferSource();
     var g = ctx.createGain();
     src.buffer = v.buffer;
@@ -312,7 +372,7 @@
     if (voice && ctx.currentTime > voice.next - 3) {
       schedulePass(voice, false);
     }
-    var h = new Date().getHours();
+    var h = currentHour();
     MusicDB.slots(game).then(function (slots) {
       var slot = pickSlot(slots, h);
       if (!slot) {
@@ -322,6 +382,7 @@
       }
       var key = game + '/' + slot;
       if (voice && voice.key === key) {
+        voice.fallback = slot !== String(h);
         return null;
       }
       loading = key;
@@ -407,7 +468,13 @@
       if (a.dir === 'left' || a.dir === 'right') {
         setGame(a.dir === 'left' ? -1 : 1);
       } else {
-        setVolume(a.dir === 'up' ? 0.1 : -0.1);
+        if (cfg.debug) {
+          // Test mode: up and down move through the hours.
+          hourOffset += a.dir === 'up' ? 1 : -1;
+          update();
+        } else {
+          setVolume(a.dir === 'up' ? 0.1 : -0.1);
+        }
       }
     }
   });
@@ -447,6 +514,11 @@
     W.log('music db', String(e));
     render();
   });
+
+  if (cfg.debug) {
+    W.$('debug').style.display = '';
+    W.$('help').textContent = 'Test mode · A or tap: play or pause · Left and right: game · Up and down: hour';
+  }
 
   setInterval(update, 1000);
   render();

@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Page Music Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+  /* The picture fills the whole widget, in the tile and in the focused view. */
+  #root {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  #pic {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  :root.fit-contain #pic {
+    object-fit: contain;
+  }
+
+  #empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2cqmin;
+    text-align: center;
+    padding: 8cqmin;
+    font-size: 5.5cqmin;
+    color: var(--muted);
+  }
+
+  #empty .icon {
+    font-size: 16cqmin;
+    color: var(--fg);
+  }
+
+  /* Status chip in the bottom left corner: track name, "Tap to play", paused. */
+  #chip {
+    position: absolute;
+    left: 4cqmin;
+    bottom: 4cqmin;
+    max-width: calc(100% - 8cqmin);
+    display: flex;
+    align-items: center;
+    gap: 2cqmin;
+    padding: 1.6cqmin 3.2cqmin;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 4.4cqmin;
+    text-shadow: none;
+    white-space: nowrap;
+    transition: opacity 300ms ease;
+  }
+
+  #chip.hidden {
+    opacity: 0;
+  }
+
+  #chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #bars {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 0.6cqmin;
+    height: 3.6cqmin;
+    flex: none;
+  }
+
+  #bars i {
+    width: 0.9cqmin;
+    height: 30%;
+    border-radius: 1cqmin;
+    background: currentColor;
+  }
+
+  :root.playing #bars i {
+    animation: bar 900ms ease-in-out infinite;
+  }
+
+  :root.playing #bars i:nth-child(2) {
+    animation-delay: -300ms;
+  }
+
+  :root.playing #bars i:nth-child(3) {
+    animation-delay: -600ms;
+  }
+
+  @keyframes bar {
+    0%, 100% {
+      height: 30%;
+    }
+
+    50% {
+      height: 100%;
+    }
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    #chip {
+      font-size: 3.4cqmin;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <img id="pic" alt="" style="display: none">
+  <div id="empty"></div>
+  <div id="chip" class="hidden"><span id="bars"><i></i><i></i><i></i></span><span id="status"></span></div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script src="shared/sound.js" data-inline></script>
+<script>
+// Page music: a picture or GIF with its own music loop. iiSU only runs a widget while its page is on
+// screen, so one of these on each page gives every page its own music: it fades in when the page
+// shows up and stops when you leave, picking up where it was next time.
+(function () {
+  var cfg = W.config({
+    track: '',            // the music (embedded by the configurator)
+    trackName: '',
+    image: '',            // the picture or GIF (embedded by the configurator)
+    fit: 'cover',         // cover (fill, cropping the edges) or contain (whole picture)
+    volume: 0.7,          // 0 to 1
+    fadeIn: 2,            // seconds to fade in when the page shows up
+    loop: 'blend',        // blend (overlap the end and the start, for tracks that fade out) or exact
+    loopBlend: 8,         // seconds of overlap in blend mode
+    duck: true,           // lower iiSU's background music while this plays
+    showName: true,       // show the track name for a few seconds when it starts
+    preview: false        // set by the configurator's preview: wait for a tap instead of playing by itself
+  });
+
+  document.documentElement.classList.add('fit-' + cfg.fit);
+
+  var AC = window.AudioContext || window.webkitAudioContext;
+  var ctx = null;
+  var master = null;
+  var buffer = null;
+  var voice = null;
+  var paused = cfg.preview || W.store.get('pagemusic:paused:' + cfg.trackName) === true;
+  var failed = '';
+  var chipTimer = null;
+  var name = (cfg.trackName || 'Music').replace(/\.[^.]+$/, '');
+
+  // ---------- Picture ----------
+  if (cfg.image) {
+    W.$('pic').src = cfg.image;
+    W.$('pic').style.display = '';
+    W.$('empty').style.display = 'none';
+  } else {
+    W.$('empty').innerHTML = W.icon('music') + '<div>' + (cfg.track ? name : 'Choose music and a picture on the configurator page') + '</div>';
+  }
+
+  // ---------- Status chip ----------
+  function status() {
+    var playing = !!voice && !paused && ctx && ctx.state === 'running';
+    document.documentElement.classList.toggle('playing', playing);
+    var text = '';
+    var stay = true;
+    if (failed) {
+      text = failed;
+    } else if (!cfg.track) {
+      text = cfg.image ? 'No music chosen' : '';
+    } else if (paused) {
+      text = 'Paused, tap to play';
+    } else if (!ctx || ctx.state !== 'running' || !buffer) {
+      text = buffer ? 'Tap to play' : 'Loading…';
+    } else {
+      text = name;
+      stay = false;
+    }
+    W.$('status').textContent = text;
+    var show = !!text && (stay || cfg.showName);
+    W.$('chip').classList.toggle('hidden', !show);
+    clearTimeout(chipTimer);
+    if (show && !stay) {
+      // The track name only shows for a moment when the music starts.
+      chipTimer = setTimeout(function () {
+        W.$('chip').classList.add('hidden');
+      }, 4000);
+    }
+  }
+
+  // ---------- Audio ----------
+  function context() {
+    if (!ctx) {
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = 0;
+      master.connect(ctx.destination);
+      ctx.onstatechange = function () {
+        duck();
+        status();
+      };
+    }
+    return ctx;
+  }
+
+  function duck() {
+    Sound.duck(cfg.duck && !paused && !!voice && ctx && ctx.state === 'running' && document.visibilityState === 'visible');
+  }
+
+  // Blend mode: passes of the track overlap by loopBlend seconds, so a fade-out at the end is hidden.
+  function schedulePass(v, first) {
+    var d = buffer.duration;
+    var blend = Math.min(cfg.loopBlend, d / 4);
+    var t = v.next;
+    var src = ctx.createBufferSource();
+    var g = ctx.createGain();
+    src.buffer = buffer;
+    src.connect(g);
+    g.connect(master);
+    g.gain.setValueAtTime(first ? 1 : 0, t);
+    if (!first) {
+      g.gain.linearRampToValueAtTime(1, t + blend);
+    }
+    g.gain.setValueAtTime(1, t + d - blend);
+    g.gain.linearRampToValueAtTime(0, t + d);
+    src.start(t);
+    src.stop(t + d + 0.05);
+    v.sources.push(src);
+    v.next = t + d - blend;
+  }
+
+  function startVoice() {
+    var v = { next: ctx.currentTime + 0.05, sources: [] };
+    if (cfg.loop === 'exact') {
+      var src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+      src.connect(master);
+      src.start(v.next);
+      v.sources.push(src);
+      v.next = Infinity;
+    } else {
+      schedulePass(v, true);
+    }
+    return v;
+  }
+
+  function stopVoice() {
+    if (voice) {
+      voice.sources.forEach(function (s) {
+        try {
+          s.stop();
+        } catch (e) {}
+      });
+      voice = null;
+    }
+  }
+
+  function fadeTo(value, seconds) {
+    var t = ctx.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(master.gain.value, t);
+    master.gain.linearRampToValueAtTime(value, t + Math.max(0.05, seconds));
+  }
+
+  function load() {
+    if (!cfg.track) {
+      status();
+      return Promise.resolve();
+    }
+    return fetch(cfg.track).then(function (r) {
+      return r.arrayBuffer();
+    }).then(function (data) {
+      return new Promise(function (resolve, reject) {
+        context().decodeAudioData(data, resolve, reject);
+      });
+    }).then(function (b) {
+      buffer = b;
+      if (!paused) {
+        play();
+      }
+      status();
+    }).catch(function (e) {
+      failed = 'Could not read the music';
+      W.log('pagemusic', String(e));
+      status();
+    });
+  }
+
+  function play() {
+    paused = false;
+    W.store.set('pagemusic:paused:' + cfg.trackName, false);
+    if (!buffer) {
+      status();
+      return;
+    }
+    context();
+    var go = function () {
+      if (!voice) {
+        voice = startVoice();
+      }
+      fadeTo(cfg.volume, cfg.fadeIn);
+      duck();
+      status();
+    };
+    if (ctx.state === 'running') {
+      go();
+    } else {
+      ctx.resume().then(go, status);
+      // If the web view wants a tap first, resume() waits: show "Tap to play" meanwhile.
+      setTimeout(status, 300);
+    }
+  }
+
+  function pause() {
+    paused = true;
+    W.store.set('pagemusic:paused:' + cfg.trackName, true);
+    if (ctx) {
+      fadeTo(0, 0.4);
+      setTimeout(function () {
+        if (paused) {
+          stopVoice();
+        }
+      }, 500);
+    }
+    duck();
+    status();
+  }
+
+  // Keeps the blend loop going.
+  setInterval(function () {
+    if (voice && ctx && ctx.state === 'running' && ctx.currentTime > voice.next - 3) {
+      schedulePass(voice, false);
+    }
+  }, 1000);
+
+  // Page hidden: freeze the audio clock (the track continues from there) and fade in again on return.
+  document.addEventListener('visibilitychange', function () {
+    if (!ctx) {
+      return;
+    }
+    if (document.visibilityState === 'visible') {
+      if (!paused && buffer) {
+        master.gain.setValueAtTime(0, ctx.currentTime);
+        ctx.resume().then(function () {
+          fadeTo(cfg.volume, cfg.fadeIn);
+          duck();
+          status();
+        }, status);
+      }
+    } else {
+      ctx.suspend().catch(function () {});
+    }
+    duck();
+  });
+
+  // A tap plays or pauses (it also counts as the tap the web view may want before sound).
+  document.addEventListener('pointerup', function () {
+    if (!cfg.track) {
+      return;
+    }
+    if (paused || !voice || !ctx || ctx.state !== 'running') {
+      play();
+    } else {
+      pause();
+    }
+  });
+
+  load();
+  status();
+})();
+</script>
+</body>
+</html>

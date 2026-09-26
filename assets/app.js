@@ -145,7 +145,25 @@
         { key: 'fade', label: 'Hour change', type: 'seg', def: 6, choices: [[2, 'Quick'], [6, 'Crossfade'], [15, 'Slow']] },
         { key: 'autoplay', label: 'Start by itself', type: 'switch', def: true },
         { key: 'duck', label: 'Lower iiSU music while playing', type: 'switch', def: true },
-        { key: 'hours', label: 'Format', type: 'seg', def: '12', choices: [['24', '24 h'], ['12', '12 h']] }
+        { key: 'hours', label: 'Format', type: 'seg', def: '12', choices: [['24', '24 h'], ['12', '12 h']] },
+        { key: 'debug', label: 'Test mode', type: 'switch', def: false },
+        { key: 'cycle', label: 'Time in test mode', type: 'seg', def: 0, choices: [[0, 'Real'], [20, '20 s per hour'], [60, '1 min per hour']], showIf: { debug: true } }
+      ]
+    },
+    {
+      id: 'pagemusic',
+      group: 'decor',
+      name: 'Page music',
+      desc: 'A picture or GIF with its own music loop. iiSU only runs a widget while its page is on screen, so put one on each page to give every page its own music. It fades in when the page shows up. Tap to play or pause.',
+      options: [
+        { key: 'track', label: 'Music', type: 'file', accept: 'audio/*', def: '' },
+        { key: 'image', label: 'Picture or GIF', type: 'file', accept: 'image/*', def: '' },
+        { key: 'fit', label: 'Picture', type: 'seg', def: 'cover', choices: [['cover', 'Fill'], ['contain', 'Whole']] },
+        { key: 'volume', label: 'Volume', type: 'seg', def: 0.7, choices: [[0.4, 'Low'], [0.7, 'Medium'], [1, 'High']] },
+        { key: 'fadeIn', label: 'Fade in', type: 'seg', def: 2, choices: [[0.5, 'Quick'], [2, 'Medium'], [5, 'Slow']] },
+        { key: 'loop', label: 'Loop', type: 'seg', def: 'blend', choices: [['blend', 'Crossfade'], ['exact', 'Exact']] },
+        { key: 'showName', label: 'Show the track name', type: 'switch', def: true },
+        { key: 'duck', label: 'Lower iiSU music while playing', type: 'switch', def: true }
       ]
     },
     {
@@ -387,6 +405,20 @@
         cfg[k] = state.widgets[w.id][k];
       }
     });
+    fileOptions(w).forEach(function (o) {
+      var m = media[w.id] && media[w.id][o.key];
+      delete cfg[o.key];
+      if (m && forPreview) {
+        cfg[o.key] = m.url;
+      }
+      if (m) {
+        cfg[o.key + 'Name'] = m.name;
+      }
+    });
+    if (forPreview) {
+      // Tells widgets they run in this page's preview (Page music then waits for a tap).
+      cfg.preview = true;
+    }
     if (w.id === 'weather' && cfg.location !== 'fixed') {
       delete cfg.lat;
       delete cfg.lon;
@@ -419,6 +451,16 @@
   }
 
   var frames = {};
+
+  // Files chosen on 'file' options (music, pictures). Kept in memory only, never in saved settings:
+  // the preview gets a blob: address, the download gets the file embedded as a data: URI.
+  var media = {};
+
+  function fileOptions(w) {
+    return w.options.filter(function (o) {
+      return o.type === 'file';
+    });
+  }
 
   function refreshPreview(w) {
     var f = frames[w.id];
@@ -519,7 +561,17 @@
         html = html.replace('</head>', function () {
           return '<style id="widget-fonts">\n' + css + '\n</style>\n</head>';
         });
-        var json = JSON.stringify(settingsFor(w), null, 2).replace(/</g, '\\u003c');
+        var cfg = settingsFor(w);
+        return Promise.all(fileOptions(w).map(function (o) {
+          var m = media[w.id] && media[w.id][o.key];
+          return m ? toDataUri(m.url).then(function (uri) {
+            cfg[o.key] = uri;
+          }) : null;
+        })).then(function () {
+          return cfg;
+        });
+      }).then(function (cfg) {
+        var json = JSON.stringify(cfg, null, 2).replace(/</g, '\\u003c');
         var marker = /<script id="widget-config" type="application\/json">[\s\S]*?<\/script>/;
         if (!marker.test(html)) {
           throw new Error('config block not found');
@@ -753,6 +805,40 @@
           control.setAttribute('aria-checked', String(s[o.key]));
           changed();
         });
+      } else if (o.type === 'file') {
+        // Choose a file (music, picture): shown in the preview, embedded in the download.
+        var input = el('input', { type: 'file', accept: o.accept || '', class: 'hidden' });
+        var label = el('span', { class: 'file-name', text: 'None' });
+        var pick = el('button', { type: 'button', class: 'btn small', text: 'Choose' });
+        var clear = el('button', { type: 'button', class: 'btn small hidden', text: 'Remove' });
+        pick.addEventListener('click', function () {
+          input.click();
+        });
+        input.addEventListener('change', function () {
+          var f = input.files[0];
+          if (!f) {
+            return;
+          }
+          media[w.id] = media[w.id] || {};
+          if (media[w.id][o.key]) {
+            URL.revokeObjectURL(media[w.id][o.key].url);
+          }
+          media[w.id][o.key] = { name: f.name, url: URL.createObjectURL(f), size: f.size };
+          label.textContent = f.name + ' (' + (f.size / 1048576).toFixed(1) + ' MB)';
+          clear.classList.remove('hidden');
+          input.value = '';
+          changed();
+        });
+        clear.addEventListener('click', function () {
+          if (media[w.id] && media[w.id][o.key]) {
+            URL.revokeObjectURL(media[w.id][o.key].url);
+            delete media[w.id][o.key];
+          }
+          label.textContent = 'None';
+          clear.classList.add('hidden');
+          changed();
+        });
+        control = el('div', { class: 'file-pick' }, [label, pick, clear, input]);
       } else if (o.type === 'place') {
         var picker = placePicker(w, s, changed);
         conditional.push({ node: picker, cond: o.showIf });

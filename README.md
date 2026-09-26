@@ -6,7 +6,7 @@ Web widgets and mini games for the iiSU launcher, with a configurator page to se
 |---|---|
 | Essentials | Clock (classic, digital, split dial, LCD, Roman, wavy), Calendar (numbers or dots), Weather (classic, bold, card), DS clock and calendar |
 | Device | Battery (level, charging, time left from measured drain, history chart), Devices (battery pills for the handheld and connected controllers), Hourly chime, Hourly music |
-| Decor | Scene (layered landscape that follows the time of day and the handheld's tilt) |
+| Decor | Scene (layered landscape that follows the time of day and the handheld's tilt), Page music (a picture or GIF with its own music loop) |
 | Games | Snake, 2048, Fire, Chef, Manhole (Game & Watch rules) |
 
 Themes: light, dark, aurora (the iiSU logo gradient, sky blue `#68ccff` to violet `#c56eff`, with film grain), transparent and custom (a top left and a bottom right color, iiSU blue and violet by default, plus a text color).
@@ -117,6 +117,14 @@ iiSU's web view has no file picker and cannot read files next to a widget (iiSU 
 3. Add the pack to iiSU as a web widget and open it once. It stores the tracks in IndexedDB (`iisu-widgets-music`, shared by all widgets, see `widgets/shared/music-db.js`) and can then be removed.
 
 Tracks are looped with an 8 second overlap, which hides the fade-out most rips end with. Smaller files load faster: `ffmpeg -i in.mp3 -c:a libopus -b:a 48k out.ogg` makes a 3 minute track about 1.2 MB. Music files and packs are listed in `.gitignore`, so they stay out of the repo.
+
+## Page music
+
+iiSU only runs a widget while its page is on screen, and stops its sound when the page goes away. `widgets/pagemusic.html` uses that: a picture or GIF with one music loop, so each iiSU page can have its own music. On the card, choose the music and the picture; the download carries both inside (a 3 minute track is 1 to 5 MB), so there is nothing else to install. It fades in when the page shows up, continues where it stopped, loops with a crossfade (or exactly, for tracks made to loop), and lowers iiSU's own music.
+
+Cards can use `type: 'file'` options: the chosen file stays in memory on the page (never in saved settings), the preview gets a `blob:` address and the download gets a `data:` URI. Previews get `preview: true`, so music waits for a tap there.
+
+The Hourly music widget has a test mode (`debug`): it shows the hour, the track, the position in the loop and the pass number, up and down step through the hours, and `cycle` runs a whole hour in 20 or 60 seconds.
 
 ## Fonts
 
