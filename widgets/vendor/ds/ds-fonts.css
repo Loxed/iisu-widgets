@@ -1,0 +1,18 @@
+/* Fonts used by the ds.css clock and calendar (https://github.com/spiritov/ds.css).
+   Subsets of the package's fonts, converted to woff2:
+   - ds-clock: "Nintendo DS - Clock Numbers Font" by zigaudrey, FontStruct Non-Commercial License
+   - ds-system: "Nitro DS font" (ニトロDSフォント), Latin characters only */
+@font-face {
+  font-family: 'ds-clock';
+  src: url('../../../fonts/ds-clock.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'ds-system';
+  src: url('../../../fonts/ds-system.woff2') format('woff2');
+}
+
+:root {
+  --font-clock: 'ds-clock', system-ui;
+  --font-system: 'ds-system', system-ui;
+}

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DS Clock Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<link rel="stylesheet" href="vendor/ds/ds-fonts.css" data-inline>
+<style>
+  #root {
+    justify-content: center;
+    align-items: center;
+    padding: 5cqmin;
+    font-family: var(--font-system);
+  }
+
+  /* The DS grid paper (from ds.css). */
+  :root.bg-grid #root {
+    --color-ds-grid-border: #c3c3c3;
+    --color-ds-grid-bg: #e3e3e3;
+    background:
+      repeating-linear-gradient(transparent, transparent 30px, var(--color-ds-grid-border) 30px, var(--color-ds-grid-border) 32px),
+      repeating-linear-gradient(to right, transparent, transparent 30px, var(--color-ds-grid-border) 30px, var(--color-ds-grid-border) 32px),
+      repeating-linear-gradient(white, white 2px, var(--color-ds-grid-bg) 2px, var(--color-ds-grid-bg) 4px);
+  }
+
+  :root.bg-none #root {
+    background: transparent;
+  }
+
+  #stage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    transform-origin: center;
+    image-rendering: pixelated;
+    flex: none;
+    /* The DS components expect black text, whatever the widget theme's text color is. */
+    color: #000000;
+    text-shadow: none;
+  }
+
+  #stage > * {
+    flex: none;
+  }
+
+  .hidden {
+    display: none !important;
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="stage">
+    <ds-clock id="clock"></ds-clock>
+    <ds-calendar id="calendar"></ds-calendar>
+  </div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script type="module" src="vendor/ds/ds-clock.js" data-inline></script>
+<script type="module" src="vendor/ds/ds-calendar.js" data-inline></script>
+<script>
+(function () {
+  var cfg = W.config({
+    show: 'auto',          // auto (clock on the tile, both when focused), clock, calendar or both
+    color: '#30baf3',      // DS favorite color (see COLORS in assets/app.js)
+    background: 'grid',    // grid (DS grid paper), theme (the widget theme) or none
+    frame: true,           // the thin grey frame around the clock and calendar
+    sharp: true            // scale by whole steps when possible, so the pixels stay crisp
+  });
+
+  var root = document.documentElement;
+  root.classList.add('bg-' + cfg.background);
+  var stage = W.$('stage');
+  var clock = W.$('clock');
+  var calendar = W.$('calendar');
+
+  [clock, calendar].forEach(function (el) {
+    el.style.setProperty('--color', cfg.color);
+    if (!cfg.frame) {
+      el.setAttribute('hide-border', '');
+    }
+  });
+
+  function wide() {
+    return window.innerWidth / window.innerHeight > 1.3;
+  }
+
+  // Which parts to show for the current size.
+  function parts() {
+    if (cfg.show === 'auto') {
+      return wide() ? ['clock', 'calendar'] : ['clock'];
+    }
+    return cfg.show === 'both' ? ['clock', 'calendar'] : [cfg.show];
+  }
+
+  // The DS components have a fixed pixel size: scale them to fill the widget.
+  function fit() {
+    var show = parts();
+    clock.classList.toggle('hidden', show.indexOf('clock') === -1);
+    calendar.classList.toggle('hidden', show.indexOf('calendar') === -1);
+    stage.style.flexDirection = show.length > 1 && !wide() ? 'column' : 'row';
+    stage.style.transform = 'none';
+    var w = stage.offsetWidth;
+    var h = stage.offsetHeight;
+    if (!w || !h) {
+      return;
+    }
+    var box = W.$('root');
+    var cs = getComputedStyle(box);
+    var availW = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    var availH = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    var s = Math.min(availW / w, availH / h);
+    if (cfg.sharp) {
+      s = s >= 1 ? Math.floor(s * 2) / 2 : s;
+    }
+    stage.style.transform = 'scale(' + s + ')';
+  }
+
+  // Wait for the components to render before measuring.
+  Promise.all([customElements.whenDefined('ds-clock'), customElements.whenDefined('ds-calendar')]).then(function () {
+    requestAnimationFrame(fit);
+    setTimeout(fit, 300);
+  });
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(fit);
+  }
+  window.addEventListener('resize', fit);
+})();
+</script>
+</body>
+</html>

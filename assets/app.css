@@ -351,6 +351,26 @@ input[type="color"] {
   }
 }
 
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(8, 22px);
+  gap: 6px;
+}
+
+.swatch-dot {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.swatch-dot[aria-checked="true"] {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--page) inset;
+}
+
 /* Cards */
 .grid {
   display: grid;

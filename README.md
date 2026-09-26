@@ -4,7 +4,7 @@ Web widgets and mini games for the iiSU launcher, with a configurator page to se
 
 | Group | Widgets |
 |---|---|
-| Essentials | Clock (classic, digital, split dial, LCD, Roman, wavy), Calendar (numbers or dots), Weather (classic, bold, card) |
+| Essentials | Clock (classic, digital, split dial, LCD, Roman, wavy), Calendar (numbers or dots), Weather (classic, bold, card), DS clock and calendar |
 | Device | Battery (level, charging, time left from measured drain, history chart), Devices (battery pills for the handheld and connected controllers), Hourly chime |
 | Decor | Scene (layered landscape that follows the time of day and the handheld's tilt) |
 | Games | Snake, 2048 |
@@ -55,6 +55,12 @@ iiSU resizes a widget when it is focused (tile to full view) and back. `runtime.
 - `fade` (default): the content (every child of `#root`) fades out in 100 ms, the widget resizes showing only its background, and the content fades back in over 260 ms once the size has not changed for 160 ms. The timings are in `RESIZE` in `runtime.js`.
 
 Widgets can also react to a resize with `W.onResize(function (size) { ... })`.
+
+## DS clock and calendar
+
+`widgets/ds.html` wraps the `<ds-clock>` and `<ds-calendar>` web components from [ds.css](https://github.com/spiritov/ds.css) by spiritov (MIT, see `widgets/vendor/ds/LICENSE`). The components have a fixed pixel size (clock 198×198, calendar 234×226); the widget scales them to fit, in half steps when "crisp pixels" is on. Their fonts are Latin subsets in woff2: `fonts/ds-clock.woff2` ("Nintendo DS - Clock Numbers Font" by zigaudrey, FontStruct Non-Commercial License) and `fonts/ds-system.woff2` (the Nitro DS font).
+
+On download, stylesheets marked `data-inline` get their `url(...)` files (fonts, images) embedded, and `type="module"` scripts stay modules.
 
 ## Fonts
 

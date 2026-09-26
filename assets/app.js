@@ -7,6 +7,14 @@
   }
   var FORMAT = { key: 'hours', label: 'Format', type: 'seg', def: '24', choices: [['24', '24 h'], ['12', '12 h']] };
 
+  // The 16 favorite colors of the Nintendo DS (values from ds.css).
+  var DS_COLORS = [
+    ['#61829a', 'Slate'], ['#ba4900', 'Brown'], ['#fb0018', 'Red'], ['#fb8afb', 'Pink'],
+    ['#fb9200', 'Orange'], ['#f3e300', 'Yellow'], ['#aafb00', 'Lime'], ['#00fb00', 'Green'],
+    ['#00a238', 'Dark green'], ['#49db8a', 'Sea green'], ['#30baf3', 'Turquoise'], ['#0059f3', 'Blue'],
+    ['#000092', 'Navy'], ['#8a00d3', 'Purple'], ['#d300eb', 'Magenta'], ['#fb0092', 'Fuchsia']
+  ];
+
   var GROUPS = [
     ['essentials', 'Essentials'],
     ['device', 'Device'],
@@ -63,6 +71,19 @@
         { key: 'previewNight', label: 'Preview at night', type: 'switch', def: false, previewOnly: true }
       ],
       extra: { lat: 48.8566, lon: 2.3522, city: 'Paris', country: 'France' }
+    },
+    {
+      id: 'ds',
+      group: 'essentials',
+      name: 'DS clock and calendar',
+      desc: 'The Nintendo DS clock and calendar, recreated by ds.css. Auto shows the clock on the tile and both when focused.',
+      options: [
+        { key: 'show', label: 'Show', type: 'seg', def: 'auto', choices: [['auto', 'Auto'], ['clock', 'Clock'], ['calendar', 'Calendar'], ['both', 'Both']] },
+        { key: 'color', label: 'Favorite color', type: 'colors', def: '#30baf3', choices: DS_COLORS },
+        { key: 'background', label: 'Background', type: 'seg', def: 'grid', choices: [['grid', 'DS grid'], ['theme', 'Theme'], ['none', 'None']] },
+        { key: 'frame', label: 'Frame', type: 'switch', def: true },
+        { key: 'sharp', label: 'Crisp pixels', type: 'switch', def: true }
+      ]
     },
     {
       id: 'battery',
@@ -316,23 +337,50 @@
     });
   }
 
+  // Files referenced by url(...) in an inlined stylesheet (fonts, images) become data: URIs.
+  function inlineCssUrls(css, cssUrl) {
+    // Quoted values are matched whole, so a url() inside a data: URI is left alone.
+    var URL_RE = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^'")\s]+))\s*\)/g;
+    var refs = [];
+    function isLocal(ref) {
+      return ref && !/^(data:|https?:|#)/.test(ref);
+    }
+    css.replace(URL_RE, function (all, d, sq, bare) {
+      var ref = d || sq || bare;
+      if (isLocal(ref) && refs.indexOf(ref) === -1) {
+        refs.push(ref);
+      }
+      return all;
+    });
+    return Promise.all(refs.map(function (ref) {
+      return toDataUri(new URL(ref, cssUrl).href);
+    })).then(function (uris) {
+      return css.replace(URL_RE, function (all, d, sq, bare) {
+        var i = refs.indexOf(d || sq || bare);
+        return i === -1 ? all : "url('" + uris[i] + "')";
+      });
+    });
+  }
+
   // Builds one self-contained file: shared CSS/JS inlined, font embedded, settings written in.
   // Everything happens in the browser, so the site stays fully static.
   function buildFile(w) {
     var pageUrl = new URL('widgets/' + w.id + '.html', location.href);
     return fetchText(pageUrl.href).then(function (html) {
       var parts = [];
-      var re = /<link rel="stylesheet" href="([^"]+)" data-inline>|<script src="([^"]+)" data-inline><\/script>/g;
+      var re = /<link rel="stylesheet" href="([^"]+)" data-inline>|<script( type="module")? src="([^"]+)" data-inline><\/script>/g;
       var m;
       while ((m = re.exec(html))) {
-        parts.push({ tag: m[0], css: !!m[1], url: new URL(m[1] || m[2], pageUrl).href });
+        parts.push({ tag: m[0], css: !!m[1], module: !!m[2], url: new URL(m[1] || m[3], pageUrl).href });
       }
       return Promise.all(parts.map(function (p) {
-        return fetchText(p.url);
+        return fetchText(p.url).then(function (text) {
+          return p.css ? inlineCssUrls(text, p.url) : text;
+        });
       })).then(function (texts) {
         parts.forEach(function (p, i) {
           var code = texts[i].replace(/<\/(script|style)/gi, '<\\/$1');
-          var inline = p.css ? '<style>\n' + code + '</style>' : '<script>\n' + code + '<\/script>';
+          var inline = p.css ? '<style>\n' + code + '</style>' : '<script' + (p.module ? ' type="module"' : '') + '>\n' + code + '<\/script>';
           html = html.replace(p.tag, function () {
             return inline;
           });
@@ -505,6 +553,22 @@
         control.addEventListener('change', function () {
           s[o.key] = o.choices[control.selectedIndex][0];
           changed();
+        });
+      } else if (o.type === 'colors') {
+        // A row of color dots, for example the 16 DS favorite colors.
+        control = el('div', { class: 'swatches', role: 'radiogroup', 'aria-label': o.label });
+        o.choices.forEach(function (c) {
+          var b = el('button', { type: 'button', class: 'swatch-dot', role: 'radio', title: c[1], 'aria-label': c[1], 'aria-checked': String(c[0] === s[o.key]) });
+          b.style.background = c[0];
+          b.addEventListener('click', function () {
+            Array.prototype.forEach.call(control.children, function (x) {
+              x.setAttribute('aria-checked', 'false');
+            });
+            b.setAttribute('aria-checked', 'true');
+            s[o.key] = c[0];
+            changed();
+          });
+          control.appendChild(b);
         });
       } else if (o.type === 'switch') {
         control = el('button', { type: 'button', class: 'switch', role: 'switch', 'aria-checked': String(!!s[o.key]), 'aria-label': o.label });
