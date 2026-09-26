@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Battery Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+  #root {
+    justify-content: space-between;
+  }
+
+  #main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 5cqmin;
+  }
+
+  #cell {
+    position: relative;
+    width: 30cqmin;
+    height: 16cqmin;
+    border: 1.6cqmin solid var(--fg);
+    border-radius: 3.5cqmin;
+    padding: 1.2cqmin;
+    flex: none;
+  }
+
+  #cell::after {
+    content: '';
+    position: absolute;
+    right: -4.2cqmin;
+    top: 50%;
+    width: 2cqmin;
+    height: 6cqmin;
+    margin-top: -3cqmin;
+    border-radius: 0 1.2cqmin 1.2cqmin 0;
+    background: var(--fg);
+  }
+
+  #fill {
+    height: 100%;
+    width: 0;
+    border-radius: 1.6cqmin;
+    background: var(--fg);
+    transition: width 400ms ease;
+  }
+
+  :root.low #fill {
+    background: #ff6b6b;
+  }
+
+  :root.charging #fill {
+    background: #7bd88f;
+  }
+
+  #bolt {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 10cqmin;
+    color: var(--fg);
+  }
+
+  :root.charging #bolt {
+    display: flex;
+  }
+
+  #level {
+    font-size: 21cqmin;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #level small {
+    font-size: 0.5em;
+    margin-left: 0.05em;
+  }
+
+  footer {
+    font-size: 6cqmin;
+    font-weight: 500;
+  }
+
+  #rate {
+    color: var(--muted);
+  }
+
+  #chart {
+    display: none;
+    flex: 1;
+    min-height: 0;
+    margin: 4cqmin 0;
+  }
+
+  #chart svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .axis {
+    font-size: 4.5cqmin;
+    fill: var(--subtle);
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    #root {
+      padding: 7cqmin 10cqmin;
+    }
+
+    #main {
+      justify-content: flex-start;
+      gap: 8cqmin;
+    }
+
+    #chart {
+      display: block;
+    }
+
+    footer {
+      font-size: 6.5cqmin;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <header class="row">
+    <span class="title">Battery</span>
+    <span id="state" class="label">Reading…</span>
+  </header>
+
+  <div id="main">
+    <div id="cell" class="depth" style="--d: 4"><div id="fill"></div><div id="bolt"></div></div>
+    <div id="level">--<small>%</small></div>
+  </div>
+
+  <div id="chart"></div>
+
+  <footer class="row">
+    <span id="estimate">Measuring…</span>
+    <span id="rate"></span>
+  </footer>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script>
+(function () {
+  var cfg = W.config({
+    lowAt: 20,           // level (%) at which the bar turns red
+    history: 12          // hours shown in the focused view's chart
+  });
+
+  var KEY = 'battery:samples';
+  var MAX_AGE = 24 * 3600 * 1000;
+  var MIN_GAP = 2 * 60 * 1000;
+  W.$('bolt').innerHTML = W.icon('zap');
+
+  function fmtDuration(hours) {
+    if (!isFinite(hours) || hours <= 0) {
+      return '';
+    }
+    var h = Math.floor(hours);
+    var m = Math.round((hours - h) * 60);
+    if (m === 60) {
+      h++;
+      m = 0;
+    }
+    return h ? h + 'h ' + (m < 10 ? '0' : '') + m + 'm' : m + 'm';
+  }
+
+  // Samples are [time, level 0 to 100, charging 0 or 1], kept for 24 h in shared storage.
+  function loadSamples() {
+    var list = W.store.get(KEY) || [];
+    var cutoff = Date.now() - MAX_AGE;
+    return list.filter(function (s) {
+      return s[0] > cutoff;
+    });
+  }
+
+  function addSample(level, charging) {
+    var list = loadSamples();
+    var last = list[list.length - 1];
+    var now = Date.now();
+    if (last && now - last[0] < MIN_GAP && last[1] === level && last[2] === charging) {
+      return list;
+    }
+    list.push([now, level, charging]);
+    W.store.set(KEY, list);
+    return list;
+  }
+
+  // Rate in % per hour since the plug state last changed. Needs 15 min and a 2% change to be trusted.
+  function rate(list, charging) {
+    var run = [];
+    for (var i = list.length - 1; i >= 0 && list[i][2] === charging; i--) {
+      run.unshift(list[i]);
+    }
+    if (run.length < 2) {
+      return null;
+    }
+    var first = run[0];
+    var last = run[run.length - 1];
+    var hours = (last[0] - first[0]) / 3600000;
+    var change = last[1] - first[1];
+    if (hours < 0.25 || Math.abs(change) < 2) {
+      return null;
+    }
+    return change / hours;
+  }
+
+  function drawChart(list) {
+    var el = W.$('chart');
+    var w = 300;
+    var h = 100;
+    var span = cfg.history * 3600000;
+    var end = Date.now();
+    var startT = end - span;
+    var pts = list.filter(function (s) {
+      return s[0] >= startT;
+    });
+    if (pts.length < 2) {
+      el.innerHTML = '<div class="hint">The level history appears here after a few minutes.</div>';
+      return;
+    }
+    function x(t) {
+      return ((t - startT) / span * w).toFixed(1);
+    }
+    function y(v) {
+      return (h - v / 100 * h).toFixed(1);
+    }
+    var line = pts.map(function (s) {
+      return x(s[0]) + ',' + y(s[1]);
+    }).join(' ');
+    var charging = '';
+    pts.forEach(function (s, i) {
+      if (s[2] && pts[i + 1]) {
+        charging += '<rect x="' + x(s[0]) + '" y="0" width="' + (x(pts[i + 1][0]) - x(s[0])).toFixed(1) + '" height="' + h + '" fill="#7bd88f" opacity="0.15"/>';
+      }
+    });
+    el.innerHTML = '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' + charging +
+      '<line x1="0" x2="' + w + '" y1="' + y(cfg.lowAt) + '" y2="' + y(cfg.lowAt) + '" stroke="#ff6b6b" stroke-dasharray="3 4" opacity="0.6" vector-effect="non-scaling-stroke"/>' +
+      '<polyline points="' + line + '" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
+      '</svg>';
+  }
+
+  function show(b) {
+    var level = Math.round(b.level * 100);
+    var charging = b.charging ? 1 : 0;
+    var list = addSample(level, charging);
+    var root = document.documentElement;
+    root.classList.toggle('charging', !!charging);
+    root.classList.toggle('low', !charging && level <= cfg.lowAt);
+
+    W.$('level').innerHTML = level + '<small>%</small>';
+    W.$('fill').style.width = level + '%';
+    W.$('state').textContent = charging ? (level >= 100 ? 'Full' : 'Charging') : (level <= cfg.lowAt ? 'Low' : 'On battery');
+
+    var r = rate(list, charging);
+    var estimate = '';
+    if (charging) {
+      if (level >= 100) {
+        estimate = 'Fully charged';
+      } else if (isFinite(b.chargingTime) && b.chargingTime > 0) {
+        estimate = fmtDuration(b.chargingTime / 3600) + ' to full';
+      } else if (r && r > 0) {
+        estimate = fmtDuration((100 - level) / r) + ' to full';
+      } else {
+        estimate = 'Measuring…';
+      }
+    } else if (isFinite(b.dischargingTime) && b.dischargingTime > 0) {
+      estimate = fmtDuration(b.dischargingTime / 3600) + ' left';
+    } else if (r && r < 0) {
+      estimate = '~' + fmtDuration(level / -r) + ' left';
+    } else {
+      estimate = 'Measuring…';
+    }
+    W.$('estimate').textContent = estimate;
+    W.$('rate').textContent = r ? (r > 0 ? '+' : '') + r.toFixed(1) + '%/h' : '';
+    drawChart(list);
+  }
+
+  if (!navigator.getBattery) {
+    W.$('state').textContent = 'Not available';
+    W.$('estimate').textContent = 'No battery info here';
+    return;
+  }
+
+  navigator.getBattery().then(function (b) {
+    function update() {
+      show(b);
+    }
+    update();
+    b.addEventListener('levelchange', update);
+    b.addEventListener('chargingchange', update);
+    b.addEventListener('chargingtimechange', update);
+    b.addEventListener('dischargingtimechange', update);
+    setInterval(update, 60000);
+  }).catch(function (e) {
+    W.log('battery failed', String(e));
+    W.$('state').textContent = 'Not available';
+  });
+})();
+</script>
+</body>
+</html>

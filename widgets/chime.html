@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hourly Chime Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+  #root {
+    justify-content: space-between;
+  }
+
+  #main {
+    display: flex;
+    align-items: center;
+    gap: 6cqmin;
+  }
+
+  #bell {
+    font-size: 24cqmin;
+    line-height: 0;
+    transform-origin: 50% 10%;
+  }
+
+  #bell.ring {
+    animation: ring 1.2s ease-in-out;
+  }
+
+  @keyframes ring {
+    0%, 100% { transform: rotate(0); }
+    15% { transform: rotate(16deg); }
+    30% { transform: rotate(-14deg); }
+    45% { transform: rotate(10deg); }
+    60% { transform: rotate(-6deg); }
+    75% { transform: rotate(3deg); }
+  }
+
+  #next-label {
+    font-size: 6cqmin;
+    color: var(--muted);
+  }
+
+  #next {
+    font-size: 18cqmin;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  footer {
+    font-size: 5.5cqmin;
+    color: var(--muted);
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    #root {
+      padding: 7cqmin 10cqmin;
+    }
+
+    #main {
+      gap: 10cqmin;
+    }
+
+    #next {
+      font-size: 22cqmin;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <header class="row">
+    <span class="title">Chime</span>
+    <span id="style-name" class="label"></span>
+  </header>
+
+  <div id="main">
+    <span id="bell" class="depth" style="--d: 5"></span>
+    <div>
+      <div id="next-label">Next chime</div>
+      <div id="next">--:--</div>
+    </div>
+  </div>
+
+  <footer class="row">
+    <span id="quiet"></span>
+    <span class="hint">Tap to test</span>
+  </footer>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script src="shared/sound.js" data-inline></script>
+<script>
+(function () {
+  var cfg = W.config({
+    sound: 'bell',        // bell, chiptune or soft
+    volume: 0.5,          // from 0.1 to 1
+    every: 60,            // minutes: 60 (on the hour) or 30 (hour and half hour)
+    countHours: false,    // ring once per hour number (3 rings at 3 o'clock) on the hour
+    quiet: true,          // no chime during quiet hours
+    quietFrom: 22,        // hour (0 to 23)
+    quietTo: 8,           // hour (0 to 23)
+    onlyOnScreen: true,   // stay silent while a game is running (iiSU not on screen)
+    vibrate: false,
+    hours: '24'           // 24 or 12, for the time shown
+  });
+
+  var NAMES = { bell: 'Bell', chiptune: 'Chiptune', soft: 'Soft' };
+  W.$('style-name').textContent = NAMES[cfg.sound] || 'Bell';
+  W.$('bell').innerHTML = W.icon('bell');
+
+  function pad(n) {
+    return (n < 10 ? '0' : '') + n;
+  }
+
+  function fmtTime(d) {
+    var h = d.getHours();
+    if (cfg.hours === '12') {
+      return (h % 12 || 12) + ':' + pad(d.getMinutes()) + (h < 12 ? ' AM' : ' PM');
+    }
+    return pad(h) + ':' + pad(d.getMinutes());
+  }
+
+  function fmtHour(h) {
+    return cfg.hours === '12' ? (h % 12 || 12) + (h < 12 ? ' AM' : ' PM') : pad(h) + ':00';
+  }
+
+  function isQuiet(d) {
+    if (!cfg.quiet || cfg.quietFrom === cfg.quietTo) {
+      return false;
+    }
+    var h = d.getHours();
+    return cfg.quietFrom < cfg.quietTo ? (h >= cfg.quietFrom && h < cfg.quietTo) : (h >= cfg.quietFrom || h < cfg.quietTo);
+  }
+
+  // The next chime time that is not in quiet hours (looks up to one day ahead).
+  function nextChime(from) {
+    var step = cfg.every === 30 ? 30 : 60;
+    var d = new Date(from);
+    d.setSeconds(0, 0);
+    d.setMinutes(Math.floor(d.getMinutes() / step) * step + step);
+    for (var i = 0; i < 48 && isQuiet(d); i++) {
+      d.setMinutes(d.getMinutes() + step);
+    }
+    return d;
+  }
+
+  function ring(d) {
+    var times = cfg.countHours && d.getMinutes() === 0 ? (d.getHours() % 12 || 12) : 1;
+    Sound.chime(cfg.sound, Math.max(0.05, Math.min(1, cfg.volume)), times);
+    if (cfg.vibrate && navigator.vibrate) {
+      navigator.vibrate([120, 80, 120]);
+    }
+    var bell = W.$('bell');
+    bell.classList.remove('ring');
+    void bell.offsetWidth;
+    bell.classList.add('ring');
+  }
+
+  var timer = null;
+
+  function schedule() {
+    var next = nextChime(Date.now());
+    W.$('next').textContent = fmtTime(next);
+    clearTimeout(timer);
+    // Wake up at the chime time, or every minute to keep the display right after sleep.
+    timer = setTimeout(tick, Math.min(next - Date.now() + 200, 60000));
+  }
+
+  function tick() {
+    var now = new Date();
+    var slot = new Date(now);
+    slot.setSeconds(0, 0);
+    var step = cfg.every === 30 ? 30 : 60;
+    var onBoundary = slot.getMinutes() % step === 0 && now.getSeconds() < 30;
+    if (onBoundary && !isQuiet(slot)) {
+      // Storage is shared by all widgets: this stops two chime widgets (or a reload) ringing twice.
+      var last = W.store.get('chime:last');
+      var visibleOk = !cfg.onlyOnScreen || document.visibilityState === 'visible';
+      if (last !== slot.getTime() && visibleOk) {
+        W.store.set('chime:last', slot.getTime());
+        ring(slot);
+      }
+    }
+    schedule();
+  }
+
+  W.$('quiet').textContent = cfg.quiet && cfg.quietFrom !== cfg.quietTo ? 'Quiet ' + fmtHour(cfg.quietFrom) + ' to ' + fmtHour(cfg.quietTo) : (cfg.every === 30 ? 'Every half hour' : 'Every hour');
+
+  document.addEventListener('pointerup', function () {
+    ring(new Date());
+  });
+
+  schedule();
+})();
+</script>
+</body>
+</html>

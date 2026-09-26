@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendar Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+
+  #root {
+    flex-direction: row;
+    gap: 10cqmin;
+  }
+
+  #today {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  #today-num {
+    font-size: 38cqmin;
+    font-weight: 600;
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+  }
+
+  #today-day {
+    font-size: 9cqmin;
+    font-weight: 600;
+  }
+
+  #today-month {
+    font-size: 7cqmin;
+    color: var(--muted);
+  }
+
+  #month-view {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 3cqmin;
+  }
+
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    row-gap: 0.8cqmin;
+    text-align: center;
+  }
+
+  .day-label {
+    font-size: 5.5cqmin;
+    font-weight: 600;
+    color: var(--subtle);
+    padding-bottom: 1cqmin;
+    text-transform: uppercase;
+  }
+
+  .cell {
+    height: 9cqmin;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 6cqmin;
+    font-weight: 500;
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cell span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 8.5cqmin;
+    height: 8.5cqmin;
+    border-radius: 50%;
+  }
+
+  .cell.weekend {
+    color: var(--muted);
+  }
+
+  .cell.today span {
+    background: var(--strong);
+    color: var(--on-strong);
+    font-weight: 600;
+    text-shadow: none;
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    #today {
+      display: flex;
+    }
+
+    /* The left panel already shows the month and day. */
+    #month-view > .row {
+      display: none;
+    }
+
+    #month-view {
+      justify-content: center;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="today">
+    <div id="today-num" class="depth" style="--d: 3"></div>
+    <div id="today-day"></div>
+    <div id="today-month"></div>
+  </div>
+  <div id="month-view">
+    <div class="row">
+      <span id="month" class="title"></span>
+      <span id="day-name" class="label"></span>
+    </div>
+    <div id="grid"></div>
+  </div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script>
+
+(function () {
+  var cfg = W.config({
+    weekStart: 'monday'    // monday or sunday
+  });
+
+  var loc = 'en';
+
+  function fmt(opts, date) {
+    try {
+      return new Intl.DateTimeFormat(loc, opts).format(date);
+    } catch (e) {
+      return new Intl.DateTimeFormat('en', opts).format(date);
+    }
+  }
+
+  function cap(s) {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function render() {
+    var now = new Date();
+    var year = now.getFullYear();
+    var month = now.getMonth();
+    var startsMonday = cfg.weekStart !== 'sunday';
+
+    W.$('month').textContent = cap(fmt({ month: 'long' }, now));
+    W.$('day-name').textContent = cap(fmt({ weekday: 'long' }, now));
+    W.$('today-num').textContent = now.getDate();
+    W.$('today-day').textContent = cap(fmt({ weekday: 'long' }, now));
+    W.$('today-month').textContent = cap(fmt({ month: 'long', year: 'numeric' }, now));
+
+    var grid = W.$('grid');
+    grid.innerHTML = '';
+
+    // 2024-01-01 was a Monday: use it to get localized day initials.
+    for (var i = 0; i < 7; i++) {
+      var dayIndex = startsMonday ? i : (i + 6) % 7;
+      var label = document.createElement('div');
+      label.className = 'day-label';
+      label.textContent = fmt({ weekday: 'narrow' }, new Date(2024, 0, 1 + dayIndex));
+      grid.appendChild(label);
+    }
+
+    var firstDay = new Date(year, month, 1).getDay();
+    var offset = startsMonday ? (firstDay + 6) % 7 : firstDay;
+    var totalDays = new Date(year, month + 1, 0).getDate();
+
+    for (var e = 0; e < offset; e++) {
+      grid.appendChild(document.createElement('div'));
+    }
+
+    for (var d = 1; d <= totalDays; d++) {
+      var weekday = new Date(year, month, d).getDay();
+      var cell = document.createElement('div');
+      cell.className = 'cell' + (weekday === 0 || weekday === 6 ? ' weekend' : '') + (d === now.getDate() ? ' today' : '');
+      var span = document.createElement('span');
+      span.textContent = d;
+      cell.appendChild(span);
+      grid.appendChild(cell);
+    }
+
+    // Redraw just after midnight.
+    var next = new Date(year, month, now.getDate() + 1, 0, 0, 5);
+    setTimeout(render, Math.min(next - now, 3600000));
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

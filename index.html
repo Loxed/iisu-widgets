@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iiSU Widgets</title>
+<meta name="description" content="Pick a theme and font, set up widgets and mini games, and download them for the iiSU launcher.">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>iiSU Widgets</h1>
+    <p class="lede">Pick a look, set up each widget, then download it and add it to iiSU as a web widget. The settings and the font are saved inside the file, so there is nothing to edit and it works offline.</p>
+  </header>
+
+  <div class="bar">
+    <div class="field-inline">
+      <span>Theme</span>
+      <div class="seg" id="theme-seg"></div>
+      <span id="custom-colors" class="field-inline hidden">
+        <input type="color" id="bg" value="#414344" aria-label="Background color">
+        <input type="color" id="fg" value="#ffffff" aria-label="Text color">
+      </span>
+    </div>
+    <div class="field-inline">
+      <span>Font</span>
+      <div class="seg" id="font-seg"></div>
+      <span id="font-note" class="note"></span>
+    </div>
+    <div class="field-inline">
+      <span>Tilt effect</span>
+      <button type="button" class="switch" role="switch" id="tilt-switch" aria-checked="false" aria-label="Tilt effect" title="Content moves slightly when you tilt the handheld"></button>
+    </div>
+    <div class="field-inline">
+      <span>Preview</span>
+      <div class="seg" id="view-seg"></div>
+    </div>
+  </div>
+
+  <div id="cards"></div>
+
+  <section class="help">
+    <h2>Adding a widget to iiSU</h2>
+    <ol>
+      <li>Open this page on your handheld and press <strong>Download</strong> (or download on a computer and copy the file over).</li>
+      <li>In iiSU, add a <strong>web widget</strong> and pick the downloaded .html file.</li>
+      <li>To change a setting later, come back here and download it again. Your choices on this page are remembered.</li>
+    </ol>
+  </section>
+
+  <section class="help">
+    <h2>Good to know</h2>
+    <ul>
+      <li><strong>Two sizes.</strong> Each widget has a compact tile and a larger layout when you focus it in iiSU. Use <em>Preview</em> above to see both.</li>
+      <li><strong>Location.</strong> iiSU does not give widgets GPS access, so <em>Automatic</em> weather uses the approximate location of your internet connection (a VPN changes it). Pick a city for an exact place.</li>
+      <li><strong>Tilt effect.</strong> Uses the handheld's motion sensor to move the content a little as you tilt it. The Scene widget always has it (unless you turn off its tilt motion).</li>
+      <li><strong>Sound.</strong> The chime and the games make sound through the handheld's speaker. The chime stays silent while a game is running unless you change that.</li>
+      <li><strong>Offline.</strong> Widgets keep their last data on the device and show it straight away, even after a restart or without a connection.</li>
+      <li><strong>Hosted links.</strong> <em>Copy link</em> gives an address with the settings in it, for apps that load a widget from a URL instead of a file.</li>
+    </ul>
+  </section>
+
+  <footer class="credits">
+    Cal Sans by the Cal Sans Project Authors (SIL Open Font License). Console Sans by PuzzylPiece. Icons from Lucide (ISC). Weather from Open-Meteo, location from GeoJS.
+  </footer>
+</main>
+
+<script src="widgets/shared/fonts.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

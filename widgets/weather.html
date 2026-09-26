@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weather Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+
+  #root {
+    justify-content: space-between;
+  }
+
+  #city {
+    display: flex;
+    align-items: center;
+    gap: 1.5cqmin;
+    min-width: 0;
+  }
+
+  #city .icon {
+    font-size: 6cqmin;
+    opacity: 0.7;
+  }
+
+  #city-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6cqmin;
+  }
+
+  #now-icon {
+    font-size: 24cqmin;
+    line-height: 0;
+  }
+
+  #temp {
+    font-size: 21cqmin;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+
+  #feels {
+    display: none;
+    font-size: 6cqmin;
+    color: var(--muted);
+    text-align: right;
+  }
+
+  footer {
+    font-size: 6cqmin;
+    font-weight: 500;
+  }
+
+  .stat {
+    display: flex;
+    align-items: center;
+    gap: 2cqmin;
+    white-space: nowrap;
+  }
+
+  .stat .icon {
+    font-size: 7cqmin;
+  }
+
+  #forecast {
+    display: none;
+    gap: 3cqmin;
+  }
+
+  .day {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5cqmin;
+    font-size: 6cqmin;
+  }
+
+  .day .icon {
+    font-size: 11cqmin;
+  }
+
+  .day .name {
+    color: var(--muted);
+  }
+
+  .day .range {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .day .range span {
+    color: var(--muted);
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    #root {
+      padding: 7cqmin 10cqmin;
+    }
+
+    #main {
+      justify-content: flex-start;
+      gap: 6cqmin;
+    }
+
+    #now-icon {
+      font-size: 22cqmin;
+    }
+
+    #temp {
+      font-size: 22cqmin;
+    }
+
+    #feels {
+      display: block;
+      margin-left: auto;
+      font-size: 7cqmin;
+    }
+
+    #forecast {
+      display: flex;
+    }
+
+    footer.row {
+      display: none;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <header class="row">
+    <span id="city" class="title"><span id="loc-icon"></span><span id="city-name">--</span></span>
+    <span id="condition" class="label">Loading…</span>
+  </header>
+
+  <div id="main">
+    <span id="now-icon" class="depth" style="--d: 4"></span>
+    <span id="temp">--°</span>
+    <span id="feels"></span>
+  </div>
+
+  <footer class="row">
+    <span class="stat"><span data-icon="arrow-down"></span><span id="t-min">--°</span></span>
+    <span class="stat"><span data-icon="arrow-up"></span><span id="t-max">--°</span></span>
+    <span class="stat"><span data-icon="wind"></span><span id="wind">--</span></span>
+  </footer>
+
+  <div id="forecast" class="row"></div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script>
+
+(function () {
+  var cfg = W.config({
+    location: 'ip',         // ip = approximate location from your connection, fixed = lat/lon below
+    lat: 48.8566,           // fixed location only
+    lon: 2.3522,            // fixed location only
+    city: 'Paris',          // name shown for a fixed location
+    tempUnit: 'celsius',    // celsius or fahrenheit
+    windUnit: 'kmh',        // kmh, mph, ms or kn
+    refresh: 15             // minutes between updates
+  });
+
+  var WIND_LABEL = { kmh: 'km/h', mph: 'mph', ms: 'm/s', kn: 'kn' };
+  var FALLBACK = { lat: 48.8566, lon: 2.3522, city: 'Paris' };
+
+  document.querySelectorAll('[data-icon]').forEach(function (el) {
+    el.outerHTML = W.icon(el.getAttribute('data-icon'));
+  });
+  W.$('now-icon').innerHTML = W.icon('loader-circle');
+
+  function details(code, isDay) {
+    switch (code) {
+      case 0: return { text: 'Clear Sky', icon: isDay ? 'sun' : 'moon' };
+      case 1: return { text: 'Mainly Clear', icon: isDay ? 'sun' : 'moon' };
+      case 2: return { text: 'Partly Cloudy', icon: isDay ? 'cloud-sun' : 'cloud-moon' };
+      case 3: return { text: 'Overcast', icon: 'cloud' };
+      case 45: case 48: return { text: 'Foggy', icon: 'cloud-fog' };
+      case 51: case 53: case 55: case 56: case 57: return { text: 'Drizzle', icon: 'cloud-drizzle' };
+      case 61: case 63: case 65: case 66: case 67: case 80: case 81: case 82: return { text: 'Rain', icon: 'cloud-rain' };
+      case 71: case 73: case 75: case 77: case 85: case 86: return { text: 'Snow', icon: 'cloud-snow' };
+      case 95: case 96: case 99: return { text: 'Thunderstorm', icon: 'cloud-lightning' };
+      default: return { text: 'Unknown', icon: 'cloud' };
+    }
+  }
+
+  function dayName(isoDate, index) {
+    if (index === 0) {
+      return 'Today';
+    }
+    var p = isoDate.split('-');
+    try {
+      return new Intl.DateTimeFormat('en', { weekday: 'short' }).format(new Date(+p[0], +p[1] - 1, +p[2]));
+    } catch (e) {
+      return isoDate.slice(5);
+    }
+  }
+
+  function draw(place, data) {
+    var c = data.current;
+    var d = data.daily;
+    var now = details(c.weather_code, c.is_day === 1);
+
+    W.$('loc-icon').innerHTML = W.icon(place.fromIp ? 'navigation' : 'map-pin');
+    W.$('city-name').textContent = place.city || '--';
+    W.$('condition').textContent = now.text;
+    W.$('now-icon').innerHTML = W.icon(now.icon);
+    W.$('temp').textContent = Math.round(c.temperature_2m) + '°';
+    W.$('feels').textContent = 'Feels ' + Math.round(c.apparent_temperature) + '° · ' + Math.round(c.wind_speed_10m) + ' ' + WIND_LABEL[cfg.windUnit];
+    W.$('t-min').textContent = Math.round(d.temperature_2m_min[0]) + '°';
+    W.$('t-max').textContent = Math.round(d.temperature_2m_max[0]) + '°';
+    W.$('wind').textContent = Math.round(c.wind_speed_10m) + ' ' + WIND_LABEL[cfg.windUnit];
+
+    var html = '';
+    for (var i = 0; i < d.time.length; i++) {
+      html += '<div class="day"><span class="name">' + dayName(d.time[i], i) + '</span>' +
+              W.icon(details(d.weather_code[i], true).icon) +
+              '<span class="range">' + Math.round(d.temperature_2m_max[i]) + '° <span>' + Math.round(d.temperature_2m_min[i]) + '°</span></span></div>';
+    }
+    W.$('forecast').innerHTML = html;
+  }
+
+  function getPlace() {
+    if (cfg.location === 'fixed') {
+      return Promise.resolve({ lat: cfg.lat, lon: cfg.lon, city: cfg.city, fromIp: false });
+    }
+    var cached = W.store.get('ip-location', 6 * 3600 * 1000);
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+    return W.fetchJson('https://get.geojs.io/v1/ip/geo.json', 8000).then(function (g) {
+      var place = { lat: parseFloat(g.latitude), lon: parseFloat(g.longitude), city: g.city || g.region || g.country, fromIp: true };
+      if (isNaN(place.lat) || isNaN(place.lon)) {
+        throw new Error('no coordinates');
+      }
+      W.store.set('ip-location', place);
+      return place;
+    }).catch(function (e) {
+      W.log('IP location failed, using fallback', String(e));
+      return W.store.get('ip-location') || { lat: FALLBACK.lat, lon: FALLBACK.lon, city: FALLBACK.city, fromIp: false };
+    });
+  }
+
+  function url(place) {
+    return 'https://api.open-meteo.com/v1/forecast?latitude=' + place.lat + '&longitude=' + place.lon +
+           '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day' +
+           '&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=5' +
+           '&temperature_unit=' + cfg.tempUnit + '&wind_speed_unit=' + cfg.windUnit + '&timezone=auto';
+  }
+
+  function cacheKey(place) {
+    return 'weather:' + place.lat.toFixed(2) + ',' + place.lon.toFixed(2) + ':' + cfg.tempUnit + ':' + cfg.windUnit;
+  }
+
+  // Show the last saved forecast straight away, then refresh it.
+  function refresh() {
+    getPlace().then(function (place) {
+      var key = cacheKey(place);
+      var saved = W.store.get(key);
+      if (saved) {
+        draw(place, saved);
+      }
+      return W.fetchJson(url(place), 10000).then(function (data) {
+        W.store.set(key, data);
+        draw(place, data);
+      }).catch(function (e) {
+        W.log('weather fetch failed', String(e));
+        if (!saved) {
+          W.$('condition').textContent = navigator.onLine === false ? 'Offline' : 'Error loading';
+        }
+      });
+    });
+  }
+
+  refresh();
+  setInterval(refresh, Math.max(5, cfg.refresh) * 60000);
+})();
+</script>
+</body>
+</html>

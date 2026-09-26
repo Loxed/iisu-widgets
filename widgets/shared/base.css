@@ -1,0 +1,112 @@
+/* Shared by every widget. Sizes use cqmin (1% of the widget's smaller side),
+   so the same file looks right as a small tile and as the focused full-screen view. */
+:root {
+  --bg: #f2f2f3;
+  --fg: #2d2834;
+  --muted: #66666c;
+  --subtle: #77777d;
+  --strong: #202023;
+  --on-strong: #f2f2f3;
+}
+
+:root[data-theme="dark"] {
+  --bg: #414344;
+  --fg: #ffffff;
+  --muted: rgba(255, 255, 255, 0.78);
+  --subtle: rgba(255, 255, 255, 0.6);
+  --strong: #ffffff;
+  --on-strong: #414344;
+}
+
+:root[data-theme="transparent"] {
+  --bg: transparent;
+  --fg: #ffffff;
+  --muted: rgba(255, 255, 255, 0.85);
+  --subtle: rgba(255, 255, 255, 0.7);
+  --strong: #ffffff;
+  --on-strong: #202023;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  container-type: size;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+  padding: 8cqmin;
+  font-family: var(--font, 'Cal Sans'), 'Cal Sans', system-ui, -apple-system, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+:root[data-theme="transparent"] #root {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  flex: none;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 3cqmin;
+}
+
+.title {
+  font-size: 8cqmin;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.label {
+  font-size: 6.5cqmin;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+
+/* Tilt parallax (the "tilt" setting). Direct children of #root move by --depth (in cqmin). */
+:root.tilt #root > * {
+  --depth: 2;
+  transform: translate(calc(var(--tilt-x, 0) * var(--depth) * 1cqmin), calc(var(--tilt-y, 0) * var(--depth) * 1cqmin));
+}
+
+:root.tilt .depth {
+  transform: translate(calc(var(--tilt-x, 0) * var(--d, 3) * 1cqmin), calc(var(--tilt-y, 0) * var(--d, 3) * 1cqmin));
+}
+
+/* Hints shown on the tile, e.g. "Focus to play" */
+.hint {
+  font-size: 5.5cqmin;
+  color: var(--subtle);
+}

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clock Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+
+  #root {
+    justify-content: center;
+    align-items: center;
+    gap: 4cqmin;
+  }
+
+  #face {
+    position: relative;
+    width: 68cqmin;
+    height: 68cqmin;
+    flex: none;
+  }
+
+  .hand {
+    position: absolute;
+    bottom: 50%;
+    left: 50%;
+    transform-origin: bottom center;
+    border-radius: 999px;
+  }
+
+  #hh {
+    width: 2cqmin;
+    height: 28%;
+    margin-left: -1cqmin;
+    background: var(--fg);
+  }
+
+  #mh {
+    width: 1.5cqmin;
+    height: 40%;
+    margin-left: -0.75cqmin;
+    background: var(--fg);
+  }
+
+  #sh {
+    width: 0.8cqmin;
+    height: 44%;
+    margin-left: -0.4cqmin;
+    background: var(--subtle);
+  }
+
+  #cap {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 4cqmin;
+    height: 4cqmin;
+    margin: -2cqmin 0 0 -2cqmin;
+    border-radius: 50%;
+    background: var(--strong);
+  }
+
+  #text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1cqmin;
+  }
+
+  #time {
+    font-size: 6.5cqmin;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: -0.005em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #time small {
+    font-size: 0.55em;
+    margin-left: 0.2em;
+  }
+
+  #date {
+    display: none;
+  }
+
+  /* Digital style */
+  :root.digital #face {
+    display: none;
+  }
+
+  :root.digital #time {
+    font-size: 26cqmin;
+    font-weight: 600;
+    color: var(--fg);
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+
+  :root.digital.secs #time {
+    font-size: 18cqmin;
+  }
+
+  :root.digital #date {
+    display: block;
+  }
+
+  /* Wide container: the focused full-screen view */
+  @container (min-aspect-ratio: 3/2) {
+    #root {
+      flex-direction: row;
+      gap: 10cqmin;
+    }
+
+    #face {
+      width: 62cqmin;
+      height: 62cqmin;
+    }
+
+    #text {
+      align-items: flex-start;
+    }
+
+    #time {
+      font-size: 18cqmin;
+      font-weight: 600;
+      color: var(--fg);
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+
+    #date {
+      display: block;
+      font-size: 8cqmin;
+    }
+
+    :root.digital #text {
+      align-items: center;
+    }
+
+    :root.digital #time,
+    :root.digital.secs #time {
+      font-size: 34cqmin;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="face">
+    <div id="hh" class="hand"></div>
+    <div id="mh" class="hand"></div>
+    <div id="sh" class="hand"></div>
+    <div id="cap"></div>
+  </div>
+  <div id="text">
+    <div id="time">--:--</div>
+    <div id="date" class="label"></div>
+  </div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script>
+
+(function () {
+  var cfg = W.config({
+    style: 'analog',      // analog or digital
+    hours: '24',          // 24 or 12
+    seconds: true
+  });
+
+  if (cfg.style === 'digital') {
+    document.documentElement.classList.add('digital');
+  }
+  if (cfg.seconds) {
+    document.documentElement.classList.add('secs');
+  } else {
+    W.$('sh').style.display = 'none';
+  }
+
+  var dateFmt;
+  try {
+    dateFmt = new Intl.DateTimeFormat('en', { weekday: 'long', day: 'numeric', month: 'long' });
+  } catch (e) {
+    dateFmt = new Intl.DateTimeFormat('en', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+
+  function pad(n) {
+    return (n < 10 ? '0' : '') + n;
+  }
+
+  function update() {
+    var now = new Date();
+    var s = now.getSeconds();
+    var m = now.getMinutes();
+    var h = now.getHours();
+
+    W.$('sh').style.transform = 'rotate(' + (s * 6) + 'deg)';
+    W.$('mh').style.transform = 'rotate(' + ((m + s / 60) * 6) + 'deg)';
+    W.$('hh').style.transform = 'rotate(' + (((h % 12) + m / 60) * 30) + 'deg)';
+
+    var text;
+    if (cfg.hours === '12') {
+      var h12 = h % 12 || 12;
+      text = h12 + ':' + pad(m) + (cfg.seconds ? ':' + pad(s) : '') + '<small>' + (h < 12 ? 'AM' : 'PM') + '</small>';
+    } else {
+      text = pad(h) + ':' + pad(m) + (cfg.seconds ? ':' + pad(s) : '');
+    }
+    W.$('time').innerHTML = text;
+    W.$('date').textContent = dateFmt.format(now);
+  }
+
+  update();
+  setInterval(update, 1000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2048 Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+  #root {
+    gap: 3cqmin;
+  }
+
+  :root.tilt #root > * {
+    --depth: 0;
+  }
+
+  #game {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8cqmin;
+  }
+
+  #board-wrap {
+    position: relative;
+    height: 100%;
+    aspect-ratio: 1 / 1;
+    max-width: 100%;
+  }
+
+  #board {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    gap: 1.6cqmin;
+  }
+
+  .t {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 2.2cqmin;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+    color: var(--fg);
+    text-shadow: none;
+  }
+
+  .t::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--fg);
+    opacity: var(--a, 0.07);
+  }
+
+  .t span {
+    position: relative;
+  }
+
+  .t.dark {
+    color: var(--on-strong);
+  }
+
+  .t.new {
+    animation: pop 160ms ease-out;
+  }
+
+  .t.merged {
+    animation: bump 160ms ease-out;
+  }
+
+  @keyframes pop {
+    from { transform: scale(0.3); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  @keyframes bump {
+    50% { transform: scale(1.12); }
+  }
+
+  #side {
+    display: none;
+    flex-direction: column;
+    gap: 3cqmin;
+    min-width: 0;
+  }
+
+  .stat-label {
+    font-size: 5.5cqmin;
+    color: var(--muted);
+  }
+
+  .stat-value {
+    font-size: 12cqmin;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #side .hint {
+    line-height: 1.5;
+  }
+
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5cqmin;
+    border-radius: 2.5cqmin;
+    background: var(--bg);
+    text-align: center;
+    pointer-events: none;
+  }
+
+  :root[data-theme="transparent"] #overlay {
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  #overlay.hidden {
+    display: none;
+  }
+
+  #overlay.soft {
+    background: transparent;
+    justify-content: flex-end;
+  }
+
+  #msg-big {
+    font-size: 11cqmin;
+    font-weight: 600;
+  }
+
+  #msg-small {
+    font-size: 5.5cqmin;
+    color: var(--muted);
+  }
+
+  #overlay.soft #msg-small {
+    padding: 1cqmin 3cqmin;
+    border-radius: 999px;
+    background: var(--bg);
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    #root {
+      padding: 5cqmin 8cqmin;
+    }
+
+    header.row {
+      display: none;
+    }
+
+    #side {
+      display: flex;
+    }
+
+    #game {
+      justify-content: flex-start;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <header class="row">
+    <span class="title">2048</span>
+    <span id="best-label" class="label">Best 0</span>
+  </header>
+  <div id="game">
+    <div id="board-wrap">
+      <div id="board"></div>
+      <div id="overlay" class="hidden"><div id="msg-big"></div><div id="msg-small"></div></div>
+    </div>
+    <div id="side">
+      <div class="title">2048</div>
+      <div><div class="stat-label">Score</div><div id="score" class="stat-value">0</div></div>
+      <div><div class="stat-label">Best</div><div id="best" class="stat-value">0</div></div>
+      <div class="hint">D-pad, stick or swipe to move.<br>Start for a new game.</div>
+    </div>
+  </div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script src="shared/input.js" data-inline></script>
+<script src="shared/sound.js" data-inline></script>
+<script>
+(function () {
+  var cfg = W.config({
+    sound: true
+  });
+
+  var STATE_KEY = '2048:game';
+  var BEST_KEY = '2048:best';
+  var game = W.store.get(STATE_KEY);
+  var best = W.store.get(BEST_KEY) || 0;
+  var mode = 'play';   // play, won, over, confirm
+  var fresh = {};
+  var merged = {};
+
+  function blip(f, d) {
+    if (cfg.sound) {
+      Sound.blip(f, d, 0.25, 'triangle');
+    }
+  }
+
+  function newGame() {
+    game = { grid: [], score: 0, keepGoing: false };
+    for (var i = 0; i < 16; i++) {
+      game.grid.push(0);
+    }
+    fresh = {};
+    merged = {};
+    spawn();
+    spawn();
+    mode = 'play';
+    save();
+  }
+
+  function save() {
+    W.store.set(STATE_KEY, game);
+    if (game.score > best) {
+      best = game.score;
+      W.store.set(BEST_KEY, best);
+    }
+  }
+
+  function spawn() {
+    var empty = [];
+    game.grid.forEach(function (v, i) {
+      if (!v) {
+        empty.push(i);
+      }
+    });
+    if (!empty.length) {
+      return;
+    }
+    var i = empty[Math.floor(Math.random() * empty.length)];
+    game.grid[i] = Math.random() < 0.9 ? 2 : 4;
+    fresh[i] = true;
+  }
+
+  // Cell indexes of each line, listed in the direction the tiles slide.
+  function lines(dir) {
+    var out = [];
+    for (var a = 0; a < 4; a++) {
+      var line = [];
+      for (var b = 0; b < 4; b++) {
+        if (dir === 'left') {
+          line.push(a * 4 + b);
+        } else if (dir === 'right') {
+          line.push(a * 4 + 3 - b);
+        } else if (dir === 'up') {
+          line.push(b * 4 + a);
+        } else {
+          line.push((3 - b) * 4 + a);
+        }
+      }
+      out.push(line);
+    }
+    return out;
+  }
+
+  function move(dir) {
+    var moved = false;
+    var gained = 0;
+    fresh = {};
+    merged = {};
+    lines(dir).forEach(function (line) {
+      var vals = line.map(function (i) { return game.grid[i]; }).filter(Boolean);
+      var result = [];
+      var mergedAt = [];
+      for (var k = 0; k < vals.length; k++) {
+        if (k + 1 < vals.length && vals[k] === vals[k + 1]) {
+          result.push(vals[k] * 2);
+          gained += vals[k] * 2;
+          mergedAt.push(result.length - 1);
+          k++;
+        } else {
+          result.push(vals[k]);
+        }
+      }
+      line.forEach(function (idx, pos) {
+        var v = result[pos] || 0;
+        if (game.grid[idx] !== v) {
+          moved = true;
+        }
+        game.grid[idx] = v;
+      });
+      mergedAt.forEach(function (pos) {
+        merged[line[pos]] = true;
+      });
+    });
+    if (!moved) {
+      return;
+    }
+    game.score += gained;
+    blip(gained ? 520 + Math.min(600, gained) : 300, 0.05);
+    spawn();
+    if (!game.keepGoing && game.grid.indexOf(2048) !== -1) {
+      mode = 'won';
+      blip(1046, 0.3);
+    } else if (!canMove()) {
+      mode = 'over';
+      blip(130, 0.4);
+    }
+    save();
+    render();
+  }
+
+  function canMove() {
+    for (var i = 0; i < 16; i++) {
+      var v = game.grid[i];
+      if (!v) {
+        return true;
+      }
+      if (i % 4 < 3 && game.grid[i + 1] === v) {
+        return true;
+      }
+      if (i < 12 && game.grid[i + 4] === v) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function render() {
+    var board = W.$('board');
+    var size = W.$('board-wrap').clientWidth;
+    board.innerHTML = '';
+    game.grid.forEach(function (v, i) {
+      var t = document.createElement('div');
+      t.className = 't' + (fresh[i] ? ' new' : '') + (merged[i] ? ' merged' : '');
+      if (v) {
+        var level = Math.log(v) / Math.LN2;
+        var alpha = Math.min(1, 0.1 + level * 0.085);
+        t.style.setProperty('--a', alpha.toFixed(2));
+        if (alpha > 0.55) {
+          t.classList.add('dark');
+        }
+        var digits = String(v).length;
+        t.style.fontSize = (size / 4 * (digits < 3 ? 0.42 : digits === 3 ? 0.34 : 0.27)) + 'px';
+        t.innerHTML = '<span>' + v + '</span>';
+      }
+      board.appendChild(t);
+    });
+    W.$('score').textContent = game.score;
+    W.$('best').textContent = best;
+    W.$('best-label').textContent = 'Best ' + best;
+
+    var overlay = W.$('overlay');
+    var big = '';
+    var small = '';
+    overlay.className = '';
+    if (!Input.isFocusedView()) {
+      overlay.className = 'soft';
+      small = 'Focus to play';
+    } else if (mode === 'won') {
+      big = '2048!';
+      small = 'Press A to keep going';
+    } else if (mode === 'over') {
+      big = 'No more moves';
+      small = 'Score ' + game.score + ' · Press A for a new game';
+    } else if (mode === 'confirm') {
+      big = 'New game?';
+      small = 'A to confirm, any direction to cancel';
+    } else {
+      overlay.className = 'hidden';
+    }
+    W.$('msg-big').textContent = big;
+    W.$('msg-big').style.display = big ? '' : 'none';
+    W.$('msg-small').textContent = small;
+  }
+
+  Input.on(function (a) {
+    if (!Input.isFocusedView()) {
+      return;
+    }
+    if (mode === 'confirm') {
+      if (a.type === 'a') {
+        newGame();
+      } else {
+        mode = canMove() ? 'play' : 'over';
+      }
+    } else if (mode === 'won') {
+      if (a.type === 'a') {
+        game.keepGoing = true;
+        mode = 'play';
+        save();
+      }
+    } else if (mode === 'over') {
+      if (a.type === 'a' || a.type === 'start') {
+        newGame();
+      }
+    } else if (a.type === 'dir') {
+      move(a.dir);
+      return;
+    } else if (a.type === 'start') {
+      mode = 'confirm';
+    }
+    render();
+  });
+
+  if (!game || !game.grid || game.grid.length !== 16) {
+    newGame();
+  } else if (!canMove()) {
+    mode = 'over';
+  }
+  render();
+  window.addEventListener('resize', render);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(render);
+  }
+})();
+</script>
+</body>
+</html>

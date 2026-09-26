@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scene Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+  #root {
+    position: relative;
+    padding: 0;
+    overflow: hidden;
+    background: #0b1026;
+  }
+
+  /* Layers bleed past the edges so tilting never shows a gap. */
+  .layer {
+    position: absolute;
+    left: -10%;
+    top: -10%;
+    width: 120%;
+    height: 120%;
+    transform: translate(calc(var(--tilt-x, 0) * var(--d) * 1cqmin), calc(var(--tilt-y, 0) * var(--d) * 1cqmin));
+  }
+
+  :root.tilt #root > .layer {
+    transform: translate(calc(var(--tilt-x, 0) * var(--d) * 1cqmin), calc(var(--tilt-y, 0) * var(--d) * 1cqmin));
+  }
+
+  #sky {
+    transition: background 60s linear;
+  }
+
+  #stars {
+    transition: opacity 60s linear;
+  }
+
+  #stars circle {
+    fill: #ffffff;
+  }
+
+  #body {
+    position: absolute;
+    width: 14cqmin;
+    height: 14cqmin;
+    margin: -7cqmin 0 0 -7cqmin;
+    border-radius: 50%;
+  }
+
+  #body.sun {
+    background: #ffe7a3;
+    box-shadow: 0 0 6cqmin 2cqmin rgba(255, 220, 140, 0.55);
+  }
+
+  #body.moon {
+    background: #f1f1e6;
+    box-shadow: 0 0 5cqmin 1cqmin rgba(240, 240, 220, 0.25), inset -3cqmin -1cqmin 0 rgba(0, 0, 0, 0.12);
+  }
+
+  .hills {
+    transition: filter 60s linear;
+  }
+
+  .hills svg {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .cloud {
+    position: absolute;
+    height: 5cqmin;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.75);
+    animation: drift linear infinite;
+  }
+
+  @keyframes drift {
+    from { transform: translateX(-40cqmin); }
+    to { transform: translateX(160cqmin); }
+  }
+
+  #clouds {
+    transition: opacity 60s linear;
+  }
+
+  #time {
+    position: absolute;
+    left: 7cqmin;
+    bottom: 6cqmin;
+    z-index: 2;
+    color: #ffffff;
+    font-size: 13cqmin;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    font-variant-numeric: tabular-nums;
+  }
+
+  :root.tilt #root > #time {
+    transform: none;
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="sky" class="layer" style="--d: 0.5"></div>
+  <svg id="stars" class="layer" style="--d: 1" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+  <div id="bodies" class="layer" style="--d: 1.5"><div id="body"></div></div>
+  <div id="clouds" class="layer" style="--d: 2.5"></div>
+  <div class="layer hills" style="--d: 3"><svg id="far" viewBox="0 0 100 100" preserveAspectRatio="none"></svg></div>
+  <div class="layer hills" style="--d: 5.5"><svg id="mid" viewBox="0 0 100 100" preserveAspectRatio="none"></svg></div>
+  <div class="layer hills" style="--d: 9"><svg id="near" viewBox="0 0 100 100" preserveAspectRatio="none"></svg></div>
+  <div id="time"></div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script>
+(function () {
+  var cfg = W.config({
+    landscape: 'meadow',   // meadow, desert or snow
+    motion: true,          // layers follow the handheld's tilt (sways gently without a motion sensor)
+    showTime: true,
+    hours: '24'            // 24 or 12
+  });
+
+  var PALETTES = {
+    meadow: ['#8cc084', '#5f9e62', '#3f7d47'],
+    desert: ['#ecc18b', '#d9a063', '#bb7c42'],
+    snow: ['#e4edf6', '#c7d7e9', '#a9bfd8']
+  };
+
+  // Sky gradient (top, bottom), hill brightness, star and cloud opacity for each part of the day.
+  var PHASES = {
+    night: { sky: ['#0b1026', '#2a2f5a'], light: 0.42, stars: 1, clouds: 0.15 },
+    dawn: { sky: ['#3b4a8a', '#f3a683'], light: 0.75, stars: 0.3, clouds: 0.7 },
+    day: { sky: ['#4aa3df', '#c4e8ff'], light: 1, stars: 0, clouds: 1 },
+    dusk: { sky: ['#2e2a5c', '#f07b5a'], light: 0.7, stars: 0.35, clouds: 0.6 }
+  };
+
+  function phaseOf(h) {
+    if (h < 5.5 || h >= 21) {
+      return 'night';
+    }
+    if (h < 7.5) {
+      return 'dawn';
+    }
+    if (h < 18.5) {
+      return 'day';
+    }
+    return 'dusk';
+  }
+
+  // Seeded random so the stars and hills keep their shape between reloads.
+  var seed = 7;
+  function rand() {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  }
+
+  function hillPath(base, amp, waves) {
+    var d = 'M0,100 L0,' + base;
+    var phase = rand() * 6.28;
+    var phase2 = rand() * 6.28;
+    for (var x = 0; x <= 100; x += 2) {
+      var y = base - Math.sin(x / 100 * Math.PI * waves + phase) * amp - Math.sin(x / 100 * Math.PI * waves * 2.3 + phase2) * amp * 0.35;
+      d += ' L' + x + ',' + y.toFixed(2);
+    }
+    return d + ' L100,100 Z';
+  }
+
+  var colors = PALETTES[cfg.landscape] || PALETTES.meadow;
+  [['far', 58, 7, 1.6], ['mid', 70, 6, 2.2], ['near', 83, 5, 1.4]].forEach(function (h, i) {
+    W.$(h[0]).innerHTML = '<path d="' + hillPath(h[1], h[2], h[3]) + '" fill="' + colors[i] + '"/>';
+  });
+
+  var stars = '';
+  for (var s = 0; s < 45; s++) {
+    stars += '<circle cx="' + (rand() * 100).toFixed(1) + '" cy="' + (rand() * 55).toFixed(1) + '" r="' + (0.15 + rand() * 0.35).toFixed(2) + '" opacity="' + (0.4 + rand() * 0.6).toFixed(2) + '"/>';
+  }
+  W.$('stars').innerHTML = stars;
+
+  var clouds = '';
+  for (var c = 0; c < 3; c++) {
+    clouds += '<div class="cloud" style="top:' + (18 + c * 11) + '%;width:' + (14 + c * 5) + 'cqmin;animation-duration:' + (90 + c * 40) + 's;animation-delay:-' + (c * 35) + 's"></div>';
+  }
+  W.$('clouds').innerHTML = clouds;
+
+  function pad(n) {
+    return (n < 10 ? '0' : '') + n;
+  }
+
+  function update() {
+    var now = new Date();
+    var h = now.getHours() + now.getMinutes() / 60;
+    var p = PHASES[phaseOf(h)];
+    W.$('sky').style.background = 'linear-gradient(to bottom, ' + p.sky[0] + ', ' + p.sky[1] + ')';
+    W.$('stars').style.opacity = p.stars;
+    W.$('clouds').style.opacity = p.clouds;
+    Array.prototype.forEach.call(document.querySelectorAll('.hills'), function (el) {
+      el.style.filter = 'brightness(' + p.light + ')';
+    });
+
+    // Sun from 6:00 to 20:00, moon otherwise, both along an arc across the sky.
+    var body = W.$('body');
+    var isSun = h >= 6 && h < 20;
+    var t = isSun ? (h - 6) / 14 : ((h + 24 - 20) % 24) / 10;
+    body.className = isSun ? 'sun' : 'moon';
+    body.style.left = (15 + t * 70) + '%';
+    body.style.top = (58 - Math.sin(t * Math.PI) * 40) + '%';
+
+    if (cfg.showTime) {
+      var hh = now.getHours();
+      W.$('time').textContent = cfg.hours === '12' ? (hh % 12 || 12) + ':' + pad(now.getMinutes()) : pad(hh) + ':' + pad(now.getMinutes());
+    }
+  }
+
+  // Skip the long fades on first paint.
+  var fading = document.querySelectorAll('#sky, #stars, #clouds, .hills');
+  Array.prototype.forEach.call(fading, function (el) {
+    el.style.transition = 'none';
+  });
+  update();
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      Array.prototype.forEach.call(fading, function (el) {
+        el.style.transition = '';
+      });
+    });
+  });
+  setInterval(update, 30000);
+
+  if (cfg.motion || cfg.tilt) {
+    W.tilt({ idle: true });
+  }
+})();
+</script>
+</body>
+</html>

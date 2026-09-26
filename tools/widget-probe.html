@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Widget Probe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cal+Sans&display=swap" rel="stylesheet">
+<style>
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+  }
+
+  #root {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #414344;
+    padding: 16px;
+    padding: 6cqmin;
+    gap: 8px;
+    gap: 3cqmin;
+    color: #ffffff;
+    font-family: 'Cal Sans', 'Nunito', system-ui, -apple-system, sans-serif;
+    container-type: size;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  header, footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+  }
+
+  #title {
+    font-size: 16px;
+    font-size: 7cqmin;
+    font-weight: 600;
+    letter-spacing: -0.018em;
+  }
+
+  #page-name {
+    font-size: 13px;
+    font-size: 5.5cqmin;
+    opacity: 0.75;
+  }
+
+  #list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    gap: 1.6cqmin;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    gap: 2.2cqmin;
+    font-size: 11px;
+    font-size: 5cqmin;
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .dot {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    width: 2.6cqmin;
+    height: 2.6cqmin;
+    border-radius: 50%;
+    background: #9a9aa0;
+  }
+
+  .ok .dot { background: #7bd88f; }
+  .no .dot { background: #ff6b6b; }
+  .warn .dot { background: #ffd166; }
+
+  .name {
+    flex: none;
+    opacity: 0.8;
+  }
+
+  .value {
+    flex: 1;
+    min-width: 0;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  footer {
+    font-size: 11px;
+    font-size: 4.6cqmin;
+    opacity: 0.8;
+  }
+
+  #pager {
+    display: flex;
+    gap: 4px;
+    gap: 1.5cqmin;
+  }
+
+  #pager span {
+    width: 6px;
+    height: 6px;
+    width: 2cqmin;
+    height: 2cqmin;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.3);
+  }
+
+  #pager span.on {
+    background: #ffffff;
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <header>
+    <span id="title">Widget probe</span>
+    <span id="page-name"></span>
+  </header>
+  <div id="list"></div>
+  <footer>
+    <span id="summary">Testing…</span>
+    <span id="pager"></span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var PAGE_MS = 6000;
+  var GROUPS = ['Storage', 'Input', 'Device', 'Network', 'Page', 'Bridges'];
+  var rows = {};
+  var order = [];
+  var page = 0;
+  var loadTime = Date.now();
+  var loadCount = '?';
+  var renderQueued = false;
+  var pageTimer = null;
+
+  function $(id) {
+    return document.getElementById(id);
+  }
+
+  function log() {
+    try {
+      if (window.console && typeof console.log === 'function') {
+        console.log.apply(console, ['[probe]'].concat(Array.prototype.slice.call(arguments)));
+      }
+    } catch (e) {}
+  }
+
+  function set(group, name, status, value) {
+    var key = group + '/' + name;
+    if (!rows[key]) {
+      order.push(key);
+    }
+    rows[key] = { group: group, name: name, status: status, value: String(value) };
+    queueRender();
+  }
+
+  function queueRender() {
+    if (renderQueued) {
+      return;
+    }
+    renderQueued = true;
+    setTimeout(function () {
+      renderQueued = false;
+      render();
+    }, 50);
+  }
+
+  function render() {
+    var group = GROUPS[page];
+    $('page-name').textContent = group + ' ' + (page + 1) + '/' + GROUPS.length;
+    var list = $('list');
+    list.innerHTML = '';
+    var ok = 0;
+    var no = 0;
+    order.forEach(function (key) {
+      var r = rows[key];
+      if (r.status === 'ok') {
+        ok++;
+      } else if (r.status === 'no') {
+        no++;
+      }
+      if (r.group !== group) {
+        return;
+      }
+      var row = document.createElement('div');
+      row.className = 'row ' + r.status;
+      var dot = document.createElement('span');
+      dot.className = 'dot';
+      var name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = r.name;
+      var value = document.createElement('span');
+      value.className = 'value';
+      value.textContent = r.value;
+      row.appendChild(dot);
+      row.appendChild(name);
+      row.appendChild(value);
+      list.appendChild(row);
+    });
+    $('summary').textContent = 'Load #' + loadCount + ' · ' + ok + ' ok · ' + no + ' no';
+    var pager = $('pager');
+    pager.innerHTML = '';
+    for (var i = 0; i < GROUPS.length; i++) {
+      var s = document.createElement('span');
+      if (i === page) {
+        s.className = 'on';
+      }
+      pager.appendChild(s);
+    }
+  }
+
+  function nextPage() {
+    page = (page + 1) % GROUPS.length;
+    render();
+    if (pageTimer) {
+      clearInterval(pageTimer);
+    }
+    pageTimer = setInterval(nextPage, PAGE_MS);
+  }
+
+  function withTimeout(p, ms) {
+    return Promise.race([p, new Promise(function (resolve, reject) {
+      setTimeout(function () {
+        reject(new Error('timeout'));
+      }, ms);
+    })]);
+  }
+
+  function errText(e) {
+    return (e && (e.name && e.name !== 'Error' ? e.name + ': ' : '') + (e.message || e)) || 'error';
+  }
+
+  function fmtDuration(ms) {
+    var s = Math.floor(ms / 1000);
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    s = s % 60;
+    return (h ? h + 'h ' : '') + (h || m ? m + 'm ' : '') + s + 's';
+  }
+
+  // ---------- Storage ----------
+  function probeStorage() {
+    try {
+      var n = (parseInt(localStorage.getItem('probe.loads'), 10) || 0) + 1;
+      localStorage.setItem('probe.loads', String(n));
+      var first = localStorage.getItem('probe.first');
+      if (!first) {
+        first = new Date().toISOString();
+        localStorage.setItem('probe.first', first);
+      }
+      loadCount = n;
+      set('Storage', 'localStorage', 'ok', 'load #' + n + ', since ' + first.slice(0, 16).replace('T', ' '));
+    } catch (e) {
+      set('Storage', 'localStorage', 'no', errText(e));
+    }
+
+    try {
+      sessionStorage.setItem('probe', '1');
+      set('Storage', 'sessionStorage', sessionStorage.getItem('probe') === '1' ? 'ok' : 'no', 'read/write');
+    } catch (e) {
+      set('Storage', 'sessionStorage', 'no', errText(e));
+    }
+
+    try {
+      document.cookie = 'probe=1; max-age=31536000; path=/';
+      var saved = document.cookie.indexOf('probe=1') !== -1;
+      set('Storage', 'Cookies', saved ? 'ok' : 'no', saved ? 'read/write' : 'not saved');
+    } catch (e) {
+      set('Storage', 'Cookies', 'no', errText(e));
+    }
+
+    if (!window.indexedDB) {
+      set('Storage', 'IndexedDB', 'no', 'no API');
+    } else {
+      set('Storage', 'IndexedDB', 'pending', '…');
+      try {
+        var req = indexedDB.open('probe', 1);
+        var guard = setTimeout(function () {
+          set('Storage', 'IndexedDB', 'warn', 'no answer');
+        }, 4000);
+        req.onsuccess = function () {
+          clearTimeout(guard);
+          req.result.close();
+          set('Storage', 'IndexedDB', 'ok', 'opens');
+        };
+        req.onerror = function () {
+          clearTimeout(guard);
+          set('Storage', 'IndexedDB', 'no', errText(req.error));
+        };
+      } catch (e) {
+        set('Storage', 'IndexedDB', 'no', errText(e));
+      }
+    }
+
+    if (!('caches' in window)) {
+      set('Storage', 'Cache API', 'no', 'no API');
+    } else {
+      withTimeout(caches.open('probe'), 4000).then(function () {
+        set('Storage', 'Cache API', 'ok', 'opens');
+      }).catch(function (e) {
+        set('Storage', 'Cache API', 'no', errText(e));
+      });
+    }
+
+    if (navigator.storage && navigator.storage.estimate) {
+      navigator.storage.estimate().then(function (est) {
+        set('Storage', 'Quota', 'ok', Math.round((est.quota || 0) / 1048576) + ' MB');
+      }).catch(function (e) {
+        set('Storage', 'Quota', 'no', errText(e));
+      });
+    } else {
+      set('Storage', 'Quota', 'no', 'no API');
+    }
+  }
+
+  // ---------- Input ----------
+  function probeInput() {
+    var taps = 0;
+    set('Input', 'Touch', 'pending', 'tap the widget (' + (navigator.maxTouchPoints || 0) + ' points)');
+    document.addEventListener('pointerdown', function (e) {
+      taps++;
+      set('Input', 'Touch', 'ok', taps + ' tap' + (taps > 1 ? 's' : '') + ' (' + e.pointerType + ')');
+      nextPage();
+    });
+
+    set('Input', 'Keys', 'pending', 'press a button');
+    document.addEventListener('keydown', function (e) {
+      set('Input', 'Keys', 'ok', (e.key || '?') + ' / ' + (e.code || e.keyCode));
+    });
+
+    set('Input', 'Focus', document.hasFocus() ? 'ok' : 'warn', document.hasFocus() ? 'has focus' : 'no focus');
+    window.addEventListener('focus', function () {
+      set('Input', 'Focus', 'ok', 'has focus');
+    });
+    window.addEventListener('blur', function () {
+      set('Input', 'Focus', 'warn', 'lost focus');
+    });
+
+    if (!navigator.getGamepads) {
+      set('Input', 'Gamepad', 'no', 'no API');
+      return;
+    }
+    set('Input', 'Gamepad', 'pending', 'API ok, press a button');
+    setInterval(function () {
+      var pads = [];
+      try {
+        pads = navigator.getGamepads() || [];
+      } catch (e) {
+        set('Input', 'Gamepad', 'no', errText(e));
+        return;
+      }
+      for (var i = 0; i < pads.length; i++) {
+        var p = pads[i];
+        if (!p) {
+          continue;
+        }
+        var pressed = [];
+        p.buttons.forEach(function (b, idx) {
+          if (b.pressed) {
+            pressed.push(idx);
+          }
+        });
+        set('Input', 'Gamepad', 'ok', (pressed.length ? 'btn ' + pressed.join(',') + ' · ' : '') + p.id.slice(0, 40));
+        return;
+      }
+    }, 300);
+  }
+
+  // ---------- Device ----------
+  function probeDevice() {
+    if (navigator.getBattery) {
+      navigator.getBattery().then(function (b) {
+        function upd() {
+          var known = isFinite(b.dischargingTime) && b.dischargingTime > 0;
+          var extra = b.charging ? ' charging' : (known ? ', ' + fmtDuration(b.dischargingTime * 1000) + ' left' : ', time left unknown');
+          set('Device', 'Battery', 'ok', Math.round(b.level * 100) + '%' + extra);
+        }
+        upd();
+        b.addEventListener('levelchange', upd);
+        b.addEventListener('chargingchange', upd);
+        b.addEventListener('dischargingtimechange', upd);
+      }).catch(function (e) {
+        set('Device', 'Battery', 'no', errText(e));
+      });
+    } else {
+      set('Device', 'Battery', 'no', 'no API');
+    }
+
+    set('Device', 'Widget size', 'ok', window.innerWidth + '×' + window.innerHeight + ' @' + (window.devicePixelRatio || 1) + 'x');
+    set('Device', 'Screen', 'ok', screen.width + '×' + screen.height);
+    set('Device', 'CPU / RAM', 'ok', (navigator.hardwareConcurrency || '?') + ' cores, ' + (navigator.deviceMemory ? navigator.deviceMemory + ' GB' : '? GB'));
+    set('Device', 'Vibration', 'vibrate' in navigator ? 'ok' : 'no', 'vibrate' in navigator ? 'API present' : 'no API');
+
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) {
+        var ctx = new AC();
+        set('Device', 'Audio', ctx.state === 'running' ? 'ok' : 'warn', ctx.state === 'running' ? 'can play sound' : 'needs a tap (' + ctx.state + ')');
+        ctx.close();
+      } else {
+        set('Device', 'Audio', 'no', 'no API');
+      }
+    } catch (e) {
+      set('Device', 'Audio', 'no', errText(e));
+    }
+
+    set('Device', 'Motion sensor', 'pending', '…');
+    var gotMotion = false;
+    window.addEventListener('deviceorientation', function (e) {
+      if (!gotMotion && e.alpha !== null) {
+        gotMotion = true;
+        set('Device', 'Motion sensor', 'ok', 'orientation events');
+      }
+    });
+    setTimeout(function () {
+      if (!gotMotion) {
+        set('Device', 'Motion sensor', 'no', 'no events in 3s');
+      }
+    }, 3000);
+  }
+
+  // ---------- Network ----------
+  function probeFetch(name, url, pick) {
+    set('Network', name, 'pending', '…');
+    var t0 = Date.now();
+    withTimeout(fetch(url, { cache: 'no-store' }), 8000).then(function (r) {
+      if (!r.ok) {
+        throw new Error('HTTP ' + r.status);
+      }
+      return r.text();
+    }).then(function (text) {
+      var info = '';
+      try {
+        info = pick ? pick(JSON.parse(text)) : '';
+      } catch (e) {}
+      set('Network', name, 'ok', (info ? info + ', ' : '') + (Date.now() - t0) + ' ms');
+    }).catch(function (e) {
+      set('Network', name, 'no', errText(e));
+    });
+  }
+
+  function probeNetwork() {
+    set('Network', 'Online', navigator.onLine ? 'ok' : 'no', navigator.onLine ? 'yes' : 'no' + (navigator.connection && navigator.connection.effectiveType ? ' (' + navigator.connection.effectiveType + ')' : ''));
+    probeFetch('Open-Meteo', 'https://api.open-meteo.com/v1/forecast?latitude=48.86&longitude=2.35&current=temperature_2m', function (d) {
+      return d.current.temperature_2m + '°C Paris';
+    });
+    probeFetch('IP location', 'https://get.geojs.io/v1/ip/geo.json', function (d) {
+      return d.city || d.country;
+    });
+    probeFetch('GitHub API', 'https://api.github.com/repos/libretro/RetroArch/releases/latest', function (d) {
+      return 'RetroArch ' + d.tag_name;
+    });
+    probeFetch('jsDelivr', 'https://cdn.jsdelivr.net/gh/Loxed/iiSU-web-widgets/README.md');
+
+    if (!navigator.geolocation) {
+      set('Network', 'Geolocation', 'no', 'no API');
+      return;
+    }
+    set('Network', 'Geolocation', 'pending', 'asking…');
+    var done = false;
+    var guard = setTimeout(function () {
+      if (!done) {
+        done = true;
+        set('Network', 'Geolocation', 'no', 'no answer (blocked by host?)');
+      }
+    }, 9000);
+    try {
+      navigator.geolocation.getCurrentPosition(function (pos) {
+        clearTimeout(guard);
+        done = true;
+        set('Network', 'Geolocation', 'ok', 'allowed, ±' + Math.round(pos.coords.accuracy) + ' m');
+      }, function (err) {
+        clearTimeout(guard);
+        if (!done) {
+          done = true;
+          set('Network', 'Geolocation', 'no', ['error', 'denied', 'unavailable', 'timeout'][err.code] || err.message);
+        }
+      }, { timeout: 8000, maximumAge: 600000 });
+    } catch (e) {
+      set('Network', 'Geolocation', 'no', errText(e));
+    }
+  }
+
+  // ---------- Page ----------
+  function probePage() {
+    var ua = navigator.userAgent || '';
+    var chrome = ua.match(/Chrome\/(\d+)/);
+    var engine = chrome ? (/; wv\)/.test(ua) ? 'Android WebView ' : 'Chrome ') + chrome[1] : ua.slice(0, 40);
+    set('Page', 'Engine', 'ok', engine);
+    set('Page', 'Origin', location.protocol === 'https:' ? 'ok' : 'warn', location.protocol + ' ' + (location.origin || 'null'));
+    set('Page', 'Secure', window.isSecureContext ? 'ok' : 'no', window.isSecureContext ? 'secure context' : 'insecure context');
+    var framed = false;
+    try {
+      framed = window.top !== window.self;
+    } catch (e) {
+      framed = true;
+    }
+    set('Page', 'Framed', 'ok', framed ? 'inside an iframe' : 'top level');
+    var tz = '';
+    try {
+      tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch (e) {}
+    set('Page', 'Locale', 'ok', (navigator.language || '?') + ', ' + (tz || '?'));
+    var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    set('Page', 'Theme', 'ok', dark ? 'system dark' : 'system light');
+
+    var visChanges = 0;
+    set('Page', 'Visibility', 'ok', document.visibilityState);
+    document.addEventListener('visibilitychange', function () {
+      visChanges++;
+      set('Page', 'Visibility', 'ok', document.visibilityState + ' (' + visChanges + ' changes)');
+    });
+
+    setInterval(function () {
+      set('Page', 'Uptime', 'ok', fmtDuration(Date.now() - loadTime));
+    }, 1000);
+
+    function measureFps() {
+      var frames = 0;
+      var start = performance.now();
+      function tick(now) {
+        frames++;
+        if (now - start < 1000) {
+          requestAnimationFrame(tick);
+        } else {
+          var fps = Math.round(frames * 1000 / (now - start));
+          set('Page', 'Frame rate', fps >= 50 ? 'ok' : 'warn', fps + ' fps');
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+    measureFps();
+    setInterval(measureFps, 10000);
+  }
+
+  // ---------- Bridges (objects injected by the host app) ----------
+  function probeBridges() {
+    var found = [];
+    try {
+      var f = document.createElement('iframe');
+      f.style.display = 'none';
+      document.body.appendChild(f);
+      var base = {};
+      Object.getOwnPropertyNames(f.contentWindow).forEach(function (k) {
+        base[k] = true;
+      });
+      document.body.removeChild(f);
+      Object.getOwnPropertyNames(window).forEach(function (k) {
+        if (!base[k]) {
+          found.push(k);
+        }
+      });
+    } catch (e) {
+      set('Bridges', 'Global diff', 'warn', errText(e));
+    }
+
+    var known = ['Android', 'android', 'AndroidBridge', 'AndroidInterface', 'iiSU', 'iisu', 'IISU', 'Iisu', 'NativeBridge', 'JSBridge', 'ReactNativeWebView', 'flutter_inappwebview', 'webkit'];
+    known.forEach(function (k) {
+      try {
+        if (window[k] !== undefined && found.indexOf(k) === -1) {
+          found.push(k);
+        }
+      } catch (e) {}
+    });
+
+    if (!found.length) {
+      set('Bridges', 'Host objects', 'warn', 'none found');
+      return;
+    }
+    set('Bridges', 'Host objects', 'ok', found.length + ' found');
+    found.slice(0, 6).forEach(function (k) {
+      var desc = typeof window[k];
+      try {
+        var obj = window[k];
+        if (obj && typeof obj === 'object') {
+          var methods = [];
+          for (var m in obj) {
+            methods.push(m);
+          }
+          desc = methods.length ? methods.slice(0, 6).join(', ') : 'object';
+        }
+      } catch (e) {
+        desc = errText(e);
+      }
+      set('Bridges', k, 'ok', desc);
+      log('bridge', k, desc);
+    });
+  }
+
+  function run(fn, name) {
+    try {
+      fn();
+    } catch (e) {
+      log(name, 'crashed', errText(e));
+    }
+  }
+
+  run(probeStorage, 'storage');
+  run(probeInput, 'input');
+  run(probeDevice, 'device');
+  run(probeNetwork, 'network');
+  run(probePage, 'page');
+  run(probeBridges, 'bridges');
+  render();
+  pageTimer = setInterval(nextPage, PAGE_MS);
+})();
+</script>
+</body>
+</html>
