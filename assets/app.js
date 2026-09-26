@@ -544,8 +544,254 @@
     return card;
   }
 
+  // ---------- Custom colors: in-page color picker ----------
+  // A picker built into the page (the system color dialog is clumsy on handhelds and differs per browser).
+  // Slot 1 and 2 are the background gradient (top left to bottom right), slot 3 the text and icons.
+  var SLOTS = [
+    { key: 'bg', num: '1', name: 'Background, top left' },
+    { key: 'bg2', num: '2', name: 'Background, bottom right' },
+    { key: 'fg', num: '3', name: 'Text and icons' }
+  ];
+  var IISU_DEFAULTS = { bg: '#68ccff', bg2: '#c56eff', fg: '#ffffff' };
+  var PRESETS = ['#68ccff', '#5e84ff', '#8258fa', '#c56eff', '#3700da', '#ffffff', '#f2f2f3', '#9a9aa0',
+                 '#414344', '#1e2327', '#000000', '#ff4d4d', '#ffb347', '#f2ee1a', '#7bd88f', '#2ab2d6'];
+
+  function clampHex(v) {
+    v = String(v || '').trim().toLowerCase();
+    if (v[0] !== '#') {
+      v = '#' + v;
+    }
+    if (/^#[0-9a-f]{3}$/.test(v)) {
+      v = '#' + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
+    }
+    return /^#[0-9a-f]{6}$/.test(v) ? v : null;
+  }
+
+  function hexToHsv(hex) {
+    var r = parseInt(hex.slice(1, 3), 16) / 255;
+    var g = parseInt(hex.slice(3, 5), 16) / 255;
+    var b = parseInt(hex.slice(5, 7), 16) / 255;
+    var max = Math.max(r, g, b);
+    var min = Math.min(r, g, b);
+    var d = max - min;
+    var h = 0;
+    if (d) {
+      if (max === r) {
+        h = ((g - b) / d) % 6;
+      } else if (max === g) {
+        h = (b - r) / d + 2;
+      } else {
+        h = (r - g) / d + 4;
+      }
+      h *= 60;
+      if (h < 0) {
+        h += 360;
+      }
+    }
+    return { h: h, s: max ? d / max : 0, v: max };
+  }
+
+  function hsvToHex(h, s, v) {
+    var c = v * s;
+    var x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    var m = v - c;
+    var rgb = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return '#' + rgb.map(function (n) {
+      return ('0' + Math.round((n + m) * 255).toString(16)).slice(-2);
+    }).join('');
+  }
+
+  function buildColorPicker(panel) {
+    var active = 'bg';
+    var hsv = hexToHsv(state[active]);
+    var refreshTimer = null;
+
+    var mini = el('div', { class: 'cp-mini', 'aria-hidden': 'true' }, [
+      el('span', { class: 'cp-mini-time', text: '12:34' }),
+      el('span', { class: 'cp-mini-date', text: 'Saturday' }),
+      el('b', { class: 'cp-badge b1', text: '1' }),
+      el('b', { class: 'cp-badge b2', text: '2' }),
+      el('b', { class: 'cp-badge b3', text: '3' })
+    ]);
+
+    var slotButtons = {};
+    var slots = el('div', { class: 'cp-slots', role: 'radiogroup', 'aria-label': 'Color to edit' });
+    SLOTS.forEach(function (slot) {
+      var b = el('button', { type: 'button', class: 'cp-slot', role: 'radio' }, [
+        el('span', { class: 'cp-num', text: slot.num }),
+        el('span', { class: 'cp-swatch' }),
+        el('span', { class: 'cp-slot-text' }, [el('span', { class: 'cp-slot-name', text: slot.name }), el('span', { class: 'cp-slot-hex' })])
+      ]);
+      b.addEventListener('click', function () {
+        select(slot.key);
+      });
+      slotButtons[slot.key] = b;
+      slots.appendChild(b);
+    });
+
+    var svKnob = el('div', { class: 'cp-knob' });
+    var sv = el('div', { class: 'cp-sv', tabindex: '0', role: 'slider', 'aria-label': 'Saturation and brightness' }, [svKnob]);
+    var hueKnob = el('div', { class: 'cp-knob' });
+    var hue = el('div', { class: 'cp-hue', tabindex: '0', role: 'slider', 'aria-label': 'Hue' }, [hueKnob]);
+    var hex = el('input', { type: 'text', class: 'cp-hex', maxlength: '7', spellcheck: 'false', 'aria-label': 'Hex color' });
+    var presets = el('div', { class: 'cp-presets' });
+    PRESETS.forEach(function (c) {
+      var p = el('button', { type: 'button', class: 'cp-preset', title: c, 'aria-label': c });
+      p.style.background = c;
+      p.addEventListener('click', function () {
+        setColor(c, true);
+      });
+      presets.appendChild(p);
+    });
+    var swap = el('button', { type: 'button', class: 'btn small', text: 'Swap 1 and 2' });
+    swap.addEventListener('click', function () {
+      var t = state.bg;
+      state.bg = state.bg2;
+      state.bg2 = t;
+      hsv = hexToHsv(state[active]);
+      update(true);
+    });
+    var reset = el('button', { type: 'button', class: 'btn small', text: 'iiSU colors' });
+    reset.addEventListener('click', function () {
+      Object.keys(IISU_DEFAULTS).forEach(function (k) {
+        state[k] = IISU_DEFAULTS[k];
+      });
+      hsv = hexToHsv(state[active]);
+      update(true);
+    });
+    var flat = el('button', { type: 'button', class: 'btn small', text: 'Flat (2 = 1)' });
+    flat.addEventListener('click', function () {
+      state.bg2 = state.bg;
+      hsv = hexToHsv(state[active]);
+      update(true);
+    });
+
+    var editorTitle = el('div', { class: 'cp-editing' });
+    panel.appendChild(el('div', { class: 'cp-legend' }, [mini, slots]));
+    panel.appendChild(el('div', { class: 'cp-editor' }, [
+      editorTitle,
+      sv,
+      hue,
+      el('div', { class: 'cp-row' }, [hex, presets]),
+      el('div', { class: 'cp-row cp-actions' }, [swap, flat, reset])
+    ]));
+
+    function select(key) {
+      active = key;
+      hsv = hexToHsv(state[key]);
+      update(false);
+    }
+
+    function setColor(c, fromOutside) {
+      state[active] = c;
+      if (fromOutside) {
+        hsv = hexToHsv(c);
+      }
+      update(true);
+    }
+
+    function update(changed) {
+      var current = state[active];
+      SLOTS.forEach(function (slot) {
+        var b = slotButtons[slot.key];
+        b.setAttribute('aria-checked', String(slot.key === active));
+        b.querySelector('.cp-swatch').style.background = state[slot.key];
+        b.querySelector('.cp-slot-hex').textContent = state[slot.key];
+      });
+      var slot = SLOTS.filter(function (s) { return s.key === active; })[0];
+      editorTitle.textContent = 'Editing ' + slot.num + ': ' + slot.name;
+      mini.style.background = state.bg === state.bg2 ? state.bg : 'linear-gradient(135deg, ' + state.bg + ', ' + state.bg2 + ')';
+      mini.style.color = state.fg;
+      mini.setAttribute('data-active', slot.num);
+      sv.style.backgroundColor = hsvToHex(hsv.h, 1, 1);
+      svKnob.style.left = (hsv.s * 100) + '%';
+      svKnob.style.top = ((1 - hsv.v) * 100) + '%';
+      svKnob.style.background = current;
+      hueKnob.style.left = (hsv.h / 360 * 100) + '%';
+      hueKnob.style.background = hsvToHex(hsv.h, 1, 1);
+      if (document.activeElement !== hex) {
+        hex.value = current;
+      }
+      if (changed) {
+        save();
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(refreshAll, 200);
+      }
+    }
+
+    function fromHsv() {
+      setColor(hsvToHex(hsv.h, hsv.s, hsv.v), false);
+    }
+
+    // Drag on the saturation/brightness square and the hue bar (mouse, touch and pen).
+    function draggable(area, onPoint) {
+      area.addEventListener('pointerdown', function (e) {
+        area.setPointerCapture(e.pointerId);
+        onPoint(e);
+        e.preventDefault();
+      });
+      area.addEventListener('pointermove', function (e) {
+        if (area.hasPointerCapture(e.pointerId)) {
+          onPoint(e);
+        }
+      });
+    }
+
+    function rel(area, e) {
+      var r = area.getBoundingClientRect();
+      return {
+        x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)),
+        y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height))
+      };
+    }
+
+    draggable(sv, function (e) {
+      var p = rel(sv, e);
+      hsv.s = p.x;
+      hsv.v = 1 - p.y;
+      fromHsv();
+    });
+    draggable(hue, function (e) {
+      hsv.h = Math.min(359.9, rel(hue, e).x * 360);
+      fromHsv();
+    });
+
+    sv.addEventListener('keydown', function (e) {
+      var step = e.shiftKey ? 0.1 : 0.02;
+      var moves = { ArrowLeft: ['s', -step], ArrowRight: ['s', step], ArrowUp: ['v', step], ArrowDown: ['v', -step] };
+      if (moves[e.key]) {
+        hsv[moves[e.key][0]] = Math.max(0, Math.min(1, hsv[moves[e.key][0]] + moves[e.key][1]));
+        fromHsv();
+        e.preventDefault();
+      }
+    });
+    hue.addEventListener('keydown', function (e) {
+      var step = e.shiftKey ? 15 : 3;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        hsv.h = (hsv.h + (e.key === 'ArrowRight' ? step : -step) + 360) % 360;
+        fromHsv();
+        e.preventDefault();
+      }
+    });
+
+    hex.addEventListener('input', function () {
+      var c = clampHex(hex.value);
+      hex.classList.toggle('invalid', !c);
+      if (c) {
+        setColor(c, true);
+      }
+    });
+    hex.addEventListener('blur', function () {
+      hex.classList.remove('invalid');
+      hex.value = state[active];
+    });
+
+    update(false);
+  }
+
   // Global controls
-  var customBox = document.getElementById('custom-colors');
+  var customBox = document.getElementById('custom-panel');
+  buildColorPicker(customBox);
   document.getElementById('theme-seg').replaceWith((function () {
     var seg = segmented(THEMES, state.theme, function (v) {
       state.theme = v;
@@ -556,17 +802,6 @@
     return seg;
   })());
   customBox.classList.toggle('hidden', state.theme !== 'custom');
-
-  ['bg', 'bg2', 'fg'].forEach(function (k) {
-    var input = document.getElementById(k);
-    input.value = state[k];
-    var timer;
-    input.addEventListener('input', function () {
-      state[k] = input.value;
-      clearTimeout(timer);
-      timer = setTimeout(refreshAll, 250);
-    });
-  });
 
   // Fonts: show each option in its own typeface, and disable the ones whose file is not in /fonts yet.
   var fontCss = Object.keys(FONTS).map(function (id) {
