@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hourly Music Test</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #15171c;
+    color: #f2f2f2;
+    font: 13px/1.3 system-ui, sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #root {
+    box-sizing: border-box;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 14px;
+  }
+
+  #buttons {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  button, label.btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 40px;
+    border: 0;
+    border-radius: 10px;
+    background: #2a2e37;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    padding: 4px 6px;
+  }
+
+  label.btn input {
+    display: none;
+  }
+
+  #stop {
+    background: #5a2a2a;
+  }
+
+  #status {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    font-size: 12px;
+  }
+
+  #status b {
+    font-weight: 600;
+    opacity: 0.7;
+  }
+
+  #log {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    white-space: pre;
+    font: 11px/1.35 ui-monospace, monospace;
+    opacity: 0.85;
+  }
+
+  .ok {
+    color: #7bd88f;
+  }
+
+  .bad {
+    color: #ff7b7b;
+  }
+
+  /* Tile: buttons and the log only. Open the widget for the full view. */
+  @media (max-height: 260px) {
+    h1, #status {
+      display: none;
+    }
+
+    button, label.btn {
+      min-height: 34px;
+      font-size: 11px;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <h1>Hourly music test</h1>
+  <div id="buttons">
+    <label class="btn">1. Pick files<input id="pick" type="file" accept="audio/*" multiple></label>
+    <label class="btn">2. Pick folder<input id="pick-dir" type="file" webkitdirectory multiple></label>
+    <button id="saved">3. Play saved</button>
+    <button id="nearby">4. File next to widget</button>
+    <button id="loop">5. Gapless loop</button>
+    <button id="stop">Stop</button>
+  </div>
+  <div id="status">
+    <b>Page</b><span id="s-page"></span>
+    <b>Saved</b><span id="s-saved">checking…</span>
+    <b>Last run</b><span id="s-beat"></span>
+  </div>
+  <div id="log"></div>
+</div>
+
+<script>
+// Checks what an hourly music widget needs from iiSU's web view:
+// 1-2. whether a file picker opens (files or a whole folder), 3. whether picked music survives
+// in storage (IndexedDB) after a restart, 4. whether a file placed next to the widget can be read,
+// 5. whether a track loops without a gap (Web Audio), and whether sound keeps playing while a game
+// is open (the "Last run" line: the page notes the time every second while music plays).
+(function () {
+  var PREFIX = 'iisu-widgets:music-test:';
+  var lines = [];
+  var audio = null;         // media element: plays music and lowers iiSU's music
+  var ctx = null;
+  var loopSource = null;
+  var beatTimer = null;
+
+  function $(id) {
+    return document.getElementById(id);
+  }
+
+  function log(text, cls) {
+    var d = new Date();
+    var t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+    lines.unshift(t + ' ' + text);
+    lines = lines.slice(0, 14);
+    $('log').textContent = lines.join('\n');
+    try {
+      console.log('[music-test]', text);
+    } catch (e) {}
+  }
+
+  $('s-page').textContent = location.href.slice(0, 60);
+
+  // ---------- Storage (IndexedDB) ----------
+  function db() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open('iisu-widgets-music-test', 1);
+      req.onupgradeneeded = function () {
+        req.result.createObjectStore('tracks');
+      };
+      req.onsuccess = function () {
+        resolve(req.result);
+      };
+      req.onerror = function () {
+        reject(req.error);
+      };
+    });
+  }
+
+  function store(name, blob) {
+    return db().then(function (d) {
+      return new Promise(function (resolve, reject) {
+        var tx = d.transaction('tracks', 'readwrite');
+        tx.objectStore('tracks').put(blob, name);
+        tx.oncomplete = resolve;
+        tx.onerror = function () {
+          reject(tx.error);
+        };
+      });
+    });
+  }
+
+  function listSaved() {
+    return db().then(function (d) {
+      return new Promise(function (resolve, reject) {
+        var out = [];
+        var tx = d.transaction('tracks', 'readonly');
+        var req = tx.objectStore('tracks').openCursor();
+        req.onsuccess = function () {
+          var cur = req.result;
+          if (cur) {
+            out.push({ name: cur.key, blob: cur.value });
+            cur.continue();
+          } else {
+            resolve(out);
+          }
+        };
+        req.onerror = function () {
+          reject(req.error);
+        };
+      });
+    });
+  }
+
+  function showSaved() {
+    listSaved().then(function (list) {
+      var mb = list.reduce(function (n, t) {
+        return n + (t.blob.size || 0);
+      }, 0) / 1048576;
+      $('s-saved').textContent = list.length ? list.length + ' track' + (list.length > 1 ? 's' : '') + ', ' + mb.toFixed(1) + ' MB' : 'none yet';
+      $('s-saved').className = list.length ? 'ok' : '';
+    }).catch(function (e) {
+      $('s-saved').textContent = 'IndexedDB error: ' + e;
+      $('s-saved').className = 'bad';
+    });
+  }
+
+  // One second of 8-bit silence as a WAV blob address.
+  function silentWav() {
+    var n = 8000;
+    var v = new DataView(new ArrayBuffer(44 + n));
+    'RIFF....WAVEfmt '.split('').forEach(function (ch, i) {
+      v.setUint8(i, ch.charCodeAt(0));
+    });
+    v.setUint32(4, 36 + n, true);
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true);
+    v.setUint32(28, 8000, true);
+    v.setUint16(32, 1, true);
+    v.setUint16(34, 8, true);
+    'data'.split('').forEach(function (ch, i) {
+      v.setUint8(36 + i, ch.charCodeAt(0));
+    });
+    v.setUint32(40, n, true);
+    for (var k = 0; k < n; k++) {
+      v.setUint8(44 + k, 128);
+    }
+    return URL.createObjectURL(new Blob([v.buffer], { type: 'audio/wav' }));
+  }
+
+  // ---------- Playing ----------
+  function heartbeat(on) {
+    clearInterval(beatTimer);
+    if (on) {
+      beatTimer = setInterval(function () {
+        try {
+          localStorage.setItem(PREFIX + 'beat', String(Date.now()));
+        } catch (e) {}
+      }, 1000);
+    }
+  }
+
+  function play(src, label) {
+    stop(true);
+    audio = new Audio();
+    audio.loop = true;
+    audio.src = src;
+    ['playing', 'pause', 'ended', 'error'].forEach(function (ev) {
+      audio.addEventListener(ev, function () {
+        log('audio: ' + ev, ev === 'error' ? 'bad' : '');
+      });
+    });
+    audio.play().then(function () {
+      log('playing ' + label);
+      heartbeat(true);
+    }).catch(function (e) {
+      log('play failed: ' + (e && e.name ? e.name : e));
+    });
+  }
+
+  function stop(quiet) {
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      audio = null;
+    }
+    if (loopSource) {
+      try {
+        loopSource.stop();
+      } catch (e) {}
+      loopSource = null;
+    }
+    heartbeat(false);
+    if (!quiet) {
+      log('stopped');
+    }
+  }
+
+  function onPicked(input, kind) {
+    var files = Array.prototype.slice.call(input.files || []).filter(function (f) {
+      return /^audio\//.test(f.type) || /\.(mp3|ogg|oga|opus|m4a|aac|wav|flac|webm)$/i.test(f.name);
+    });
+    log(kind + ' picker returned ' + (input.files ? input.files.length : 0) + ' file(s), ' + files.length + ' audio');
+    if (!files.length) {
+      return;
+    }
+    var saves = files.map(function (f) {
+      return store(f.webkitRelativePath || f.name, f);
+    });
+    Promise.all(saves).then(function () {
+      log('saved ' + files.length + ' to storage', 'ok');
+      showSaved();
+      play(URL.createObjectURL(files[0]), files[0].name);
+    }).catch(function (e) {
+      log('saving failed: ' + e, 'bad');
+    });
+    input.value = '';
+  }
+
+  // Tapping the label opens the picker. If nothing happens, the web view has no file picker.
+  $('pick').addEventListener('click', function () {
+    log('asked for a file picker…');
+  });
+  $('pick-dir').addEventListener('click', function () {
+    log('asked for a folder picker…');
+  });
+  $('pick').addEventListener('change', function () {
+    onPicked($('pick'), 'file');
+  });
+  $('pick-dir').addEventListener('change', function () {
+    onPicked($('pick-dir'), 'folder');
+  });
+
+  $('saved').addEventListener('click', function () {
+    listSaved().then(function (list) {
+      if (!list.length) {
+        log('nothing saved yet: pick files first');
+        return;
+      }
+      var t = list[Math.floor(Math.random() * list.length)];
+      play(URL.createObjectURL(t.blob), t.name + ' (from storage)');
+    });
+  });
+
+  // A file placed in the same folder as this widget, named hourly-test.mp3 (or .ogg).
+  $('nearby').addEventListener('click', function () {
+    var names = ['hourly-test.mp3', 'hourly-test.ogg', 'hourly-test.m4a'];
+    (function next(i) {
+      if (i >= names.length) {
+        log('no hourly-test file next to the widget (or not readable)', 'bad');
+        return;
+      }
+      var url = new URL(names[i], location.href).href;
+      fetch(url).then(function (r) {
+        if (!r.ok) {
+          throw new Error(r.status);
+        }
+        return r.blob();
+      }).then(function (blob) {
+        log('read ' + names[i] + ' (' + (blob.size / 1048576).toFixed(1) + ' MB)', 'ok');
+        play(URL.createObjectURL(blob), names[i]);
+      }).catch(function (e) {
+        log(names[i] + ': ' + (e && e.message ? e.message : e));
+        next(i + 1);
+      });
+    })(0);
+  });
+
+  // Plays the first saved track through Web Audio with a seamless loop, plus a silent media
+  // element so iiSU still lowers its music.
+  $('loop').addEventListener('click', function () {
+    listSaved().then(function (list) {
+      if (!list.length) {
+        log('nothing saved yet: pick files first');
+        return null;
+      }
+      return list[0].blob.arrayBuffer().then(function (buf) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        ctx = ctx || new AC();
+        if (ctx.state === 'suspended') {
+          ctx.resume();
+        }
+        return ctx.decodeAudioData(buf).then(function (data) {
+          stop(true);
+          loopSource = ctx.createBufferSource();
+          loopSource.buffer = data;
+          loopSource.loop = true;
+          loopSource.connect(ctx.destination);
+          loopSource.start();
+          log('gapless loop of ' + list[0].name + ' (' + data.duration.toFixed(1) + ' s)', 'ok');
+          heartbeat(true);
+          // Silent media track, for audio focus (lowers iiSU's music).
+          audio = new Audio();
+          audio.loop = true;
+          audio.src = silentWav();
+          audio.play().catch(function () {});
+        });
+      });
+    }).catch(function (e) {
+      log('loop failed: ' + (e && e.message ? e.message : e), 'bad');
+    });
+  });
+
+  $('stop').addEventListener('click', function () {
+    stop();
+  });
+
+  // ---------- Does sound keep playing while a game is open? ----------
+  function showBeat() {
+    var beat = 0;
+    try {
+      beat = +localStorage.getItem(PREFIX + 'beat') || 0;
+    } catch (e) {}
+    $('s-beat').textContent = beat ? 'music was playing ' + Math.round((Date.now() - beat) / 1000) + ' s ago' : 'never';
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    log('page ' + document.visibilityState);
+    if (document.visibilityState === 'visible') {
+      showBeat();
+    }
+  });
+  setInterval(showBeat, 5000);
+  showBeat();
+  showSaved();
+  log('ready');
+})();
+</script>
+</body>
+</html>

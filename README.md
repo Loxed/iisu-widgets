@@ -5,7 +5,7 @@ Web widgets and mini games for the iiSU launcher, with a configurator page to se
 | Group | Widgets |
 |---|---|
 | Essentials | Clock (classic, digital, split dial, LCD, Roman, wavy), Calendar (numbers or dots), Weather (classic, bold, card), DS clock and calendar |
-| Device | Battery (level, charging, time left from measured drain, history chart), Devices (battery pills for the handheld and connected controllers), Hourly chime |
+| Device | Battery (level, charging, time left from measured drain, history chart), Devices (battery pills for the handheld and connected controllers), Hourly chime, Hourly music |
 | Decor | Scene (layered landscape that follows the time of day and the handheld's tilt) |
 | Games | Snake, 2048, Fire, Chef, Manhole (Game & Watch rules) |
 
@@ -105,6 +105,18 @@ A skin can also bring its own screen layout, for sprites drawn for a different s
 Fire uses the Game & Watch Gallery sprites by default (`skin: 'gallery'`, credits: Nintendo, ripped by Mario Gamer, shaded and recolored by Grynz). They live in `skins/fire-gallery/`: `sheet.png`, `background.png` and `skin.json` are the sources, and `skin.js` is the same skin with the images embedded, loaded with `data-inline` so downloads work offline. After changing the sources, rebuild `skin.js` (it sets `GW.skins.gallery`). `skin: 'none'` goes back to the redrawn LCD, and any other value is read as the address of a skin JSON file.
 
 Chef uses the Game & Watch Gallery sprites the same way (`skins/chef-gallery/`, ripped by Classic Jack). Its Game A uses the three left columns of the four. Manhole too (`skins/manhole-gallery/`, ripped by Classic Jack): its walkways have ten steps with the holes on the 4th and 7th, and a fall plays as eight frames (four tumbling, four splashing). A skin's `ghostSkip` lists segment ids that get no ghost, used there for the overlapping fall frames.
+
+## Hourly music
+
+`widgets/music.html` plays a game's track for the current hour (Animal Crossing style), loops it and crossfades to the next one on the hour. It plays while iiSU shows the widget, lowers iiSU's own music (see `Sound.duck`), and pauses its audio when the page is hidden.
+
+iiSU's web view has no file picker and cannot read files next to a widget (iiSU copies each widget to `https://localhost/web-widgets/<id>`), so the music arrives in a **music pack**:
+
+1. On the Hourly music card, choose a game's tracks from your own files. Names like `5 PM`, `05pm` or `17h` are matched to hours, and any hour can be set by hand.
+2. **Download music pack**: an HTML file with the tracks inside (split into several files above 20 MB). It is built in the browser; the music is not uploaded anywhere.
+3. Add the pack to iiSU as a web widget and open it once. It stores the tracks in IndexedDB (`iisu-widgets-music`, shared by all widgets, see `widgets/shared/music-db.js`) and can then be removed.
+
+Tracks are looped with an 8 second overlap, which hides the fade-out most rips end with. Smaller files load faster: `ffmpeg -i in.mp3 -c:a libopus -b:a 48k out.ogg` makes a 3 minute track about 1.2 MB. Music files and packs are listed in `.gitignore`, so they stay out of the repo.
 
 ## Fonts
 

@@ -135,6 +135,20 @@
       ]
     },
     {
+      id: 'music',
+      group: 'device',
+      name: 'Hourly music',
+      desc: 'Plays a game\'s music for the current hour, loops it and crossfades to the next track on the hour, while iiSU shows the widget. The music comes from your own files, through a music pack made below. Tap to play or pause.',
+      panel: 'MusicPackPanel',
+      options: [
+        { key: 'volume', label: 'Volume', type: 'seg', def: 0.7, choices: [[0.4, 'Low'], [0.7, 'Medium'], [1, 'High']] },
+        { key: 'fade', label: 'Hour change', type: 'seg', def: 6, choices: [[2, 'Quick'], [6, 'Crossfade'], [15, 'Slow']] },
+        { key: 'autoplay', label: 'Start by itself', type: 'switch', def: true },
+        { key: 'duck', label: 'Lower iiSU music while playing', type: 'switch', def: true },
+        { key: 'hours', label: 'Format', type: 'seg', def: '12', choices: [['24', '24 h'], ['12', '12 h']] }
+      ]
+    },
+    {
       id: 'scene',
       group: 'decor',
       name: 'Scene',
@@ -751,6 +765,11 @@
       }
       rows.push(row);
     });
+
+    // A card can add its own section below the options (w.panel names a function on window).
+    if (w.panel && typeof window[w.panel] === 'function') {
+      rows.push(window[w.panel](w, s, changed));
+    }
 
     var dl = el('button', { type: 'button', class: 'btn primary', text: 'Download' });
     dl.addEventListener('click', function () {

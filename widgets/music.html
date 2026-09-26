@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hourly Music Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+  #root {
+    gap: 3cqmin;
+  }
+
+  #main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3cqmin;
+    text-align: center;
+  }
+
+  #hour {
+    font-size: 22cqmin;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #state {
+    display: flex;
+    align-items: center;
+    gap: 2.5cqmin;
+    font-size: 5.5cqmin;
+    color: var(--muted);
+  }
+
+  /* Three bars that bounce while music plays. */
+  #bars {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 0.8cqmin;
+    height: 5cqmin;
+  }
+
+  #bars i {
+    width: 1.1cqmin;
+    height: 30%;
+    border-radius: 1cqmin;
+    background: currentColor;
+  }
+
+  :root.playing #bars i {
+    animation: bar 900ms ease-in-out infinite;
+  }
+
+  :root.playing #bars i:nth-child(2) {
+    animation-delay: -300ms;
+  }
+
+  :root.playing #bars i:nth-child(3) {
+    animation-delay: -600ms;
+  }
+
+  @keyframes bar {
+    0%, 100% {
+      height: 30%;
+    }
+
+    50% {
+      height: 100%;
+    }
+  }
+
+  .focus-only {
+    display: none;
+  }
+
+  #vol {
+    height: 1.4cqmin;
+    border-radius: 1cqmin;
+    background: var(--subtle);
+    overflow: hidden;
+  }
+
+  #vol-fill {
+    height: 100%;
+    background: var(--fg);
+    transition: width 150ms ease;
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    #root {
+      padding: 5cqmin 8cqmin;
+    }
+
+    #hour {
+      font-size: 26cqmin;
+    }
+
+    #state {
+      font-size: 4.5cqmin;
+    }
+
+    .focus-only {
+      display: block;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <header class="row">
+    <span class="title">Music</span>
+    <span id="game" class="label"></span>
+  </header>
+  <div id="main">
+    <div id="hour"></div>
+    <div id="state"><span id="bars"><i></i><i></i><i></i></span><span id="status"></span></div>
+  </div>
+  <div id="vol" class="focus-only"><div id="vol-fill"></div></div>
+  <div class="hint focus-only">A or tap: play or pause · Left and right: game · Up and down: volume</div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script src="shared/input.js" data-inline></script>
+<script src="shared/sound.js" data-inline></script>
+<script src="shared/music-db.js" data-inline></script>
+<script>
+// Hourly music: plays the track for the current hour from a game's music, installed by a music pack,
+// loops it seamlessly and crossfades to the next track on the hour. Plays while iiSU shows the widget.
+(function () {
+  var cfg = W.config({
+    game: '',          // music to play (a pack's name); empty: the last one picked, or the first installed
+    volume: 0.7,       // 0 to 1
+    fade: 6,           // seconds of crossfade when the hour changes
+    loopBlend: 8,      // seconds of overlap when a track loops (hides the fade at the end of a track)
+    duck: true,        // lower iiSU's background music while this plays
+    autoplay: true,    // start by itself (the web view may still want a tap first)
+    hours: '12'        // 12 or 24
+  });
+
+  var AC = window.AudioContext || window.webkitAudioContext;
+  var ctx = null;
+  var master = null;
+  var voice = null;          // what is playing: { key, gain, buffer, next, sources }
+  var games = [];
+  var game = cfg.game || W.store.get('music:game') || '';
+  var volume = W.store.get('music:volume');
+  var paused = W.store.get('music:paused') === true || !cfg.autoplay;
+  var loading = null;        // key being loaded
+  var cache = {};            // key -> decoded buffer (the current and the next hour)
+  var message = '';
+
+  if (typeof volume !== 'number') {
+    volume = cfg.volume;
+  }
+
+  function hourLabel(h) {
+    if (cfg.hours === '24') {
+      return (h < 10 ? '0' : '') + h + ':00';
+    }
+    return (h % 12 || 12) + (h < 12 ? ' AM' : ' PM');
+  }
+
+  function render() {
+    var h = new Date().getHours();
+    W.$('hour').textContent = hourLabel(h);
+    W.$('game').textContent = game || '';
+    var playing = !!voice && !paused && ctx && ctx.state === 'running';
+    document.documentElement.classList.toggle('playing', playing);
+    var status = message;
+    if (!status) {
+      if (!games.length) {
+        status = 'No music installed yet';
+      } else if (paused) {
+        status = 'Paused, tap to play';
+      } else if (ctx && ctx.state !== 'running') {
+        status = 'Tap to play';
+      } else if (loading) {
+        status = 'Loading…';
+      } else if (voice && voice.fallback) {
+        status = 'Playing the ' + hourLabel(+voice.slot) + ' track';
+      } else {
+        status = voice ? 'Playing' : '';
+      }
+    }
+    W.$('status').textContent = status;
+    W.$('vol-fill').style.width = Math.round(volume * 100) + '%';
+  }
+
+  // ---------- Audio ----------
+  function ensureContext() {
+    if (!ctx) {
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = volume;
+      master.connect(ctx.destination);
+      ctx.onstatechange = render;
+    }
+    return ctx;
+  }
+
+  // The track for an hour, or the closest earlier hour this game has.
+  function pickSlot(slots, h) {
+    for (var i = 0; i < 24; i++) {
+      var s = String((h - i + 24) % 24);
+      if (slots.indexOf(s) >= 0) {
+        return s;
+      }
+    }
+    return null;
+  }
+
+  function loadBuffer(key, g, slot) {
+    if (cache[key]) {
+      return Promise.resolve(cache[key]);
+    }
+    return MusicDB.track(g, slot).then(function (t) {
+      if (!t || !t.blob) {
+        throw new Error('missing track ' + key);
+      }
+      return new Response(t.blob).arrayBuffer();
+    }).then(function (data) {
+      return new Promise(function (resolve, reject) {
+        // The callback form also works on older web views.
+        ensureContext().decodeAudioData(data, resolve, reject);
+      });
+    }).then(function (buffer) {
+      // Keep only this track and the one before (the hour it replaces).
+      Object.keys(cache).forEach(function (k) {
+        if (!voice || k !== voice.key) {
+          delete cache[k];
+        }
+      });
+      cache[key] = buffer;
+      return buffer;
+    });
+  }
+
+  // Schedules one pass of the track; passes overlap by loopBlend seconds so the loop has no gap.
+  function schedulePass(v, first) {
+    var d = v.buffer.duration;
+    var blend = Math.min(cfg.loopBlend, d / 4);
+    var t = v.next;
+    var src = ctx.createBufferSource();
+    var g = ctx.createGain();
+    src.buffer = v.buffer;
+    src.connect(g);
+    g.connect(v.gain);
+    if (first) {
+      g.gain.setValueAtTime(1, t);
+    } else {
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(1, t + blend);
+    }
+    g.gain.setValueAtTime(1, t + d - blend);
+    g.gain.linearRampToValueAtTime(0, t + d);
+    src.start(t);
+    src.stop(t + d + 0.05);
+    v.sources.push(src);
+    v.next = t + d - blend;
+  }
+
+  function startVoice(key, slot, buffer, fadeIn, fallback) {
+    var t = ctx.currentTime + 0.05;
+    var v = { key: key, slot: slot, buffer: buffer, gain: ctx.createGain(), next: t, sources: [], fallback: fallback };
+    v.gain.gain.setValueAtTime(0.0001, t);
+    v.gain.gain.linearRampToValueAtTime(1, t + Math.max(0.05, fadeIn));
+    v.gain.connect(master);
+    schedulePass(v, true);
+    return v;
+  }
+
+  function stopVoice(v, fadeOut) {
+    if (!v) {
+      return;
+    }
+    var t = ctx.currentTime;
+    v.gain.gain.cancelScheduledValues(t);
+    v.gain.gain.setValueAtTime(v.gain.gain.value, t);
+    v.gain.gain.linearRampToValueAtTime(0.0001, t + Math.max(0.05, fadeOut));
+    setTimeout(function () {
+      v.sources.forEach(function (s) {
+        try {
+          s.stop();
+        } catch (e) {}
+      });
+      try {
+        v.gain.disconnect();
+      } catch (e) {}
+    }, (fadeOut + 0.2) * 1000);
+  }
+
+  // Makes the right track play: called every second and after any change.
+  function update() {
+    render();
+    var visible = document.visibilityState === 'visible';
+    Sound.duck(cfg.duck && visible && !paused && !!voice && ctx && ctx.state === 'running');
+    if (!ctx || paused || !visible || !game || loading) {
+      return;
+    }
+    if (ctx.state !== 'running') {
+      ctx.resume().catch(function () {});
+      return;
+    }
+    // Keep the loop going.
+    if (voice && ctx.currentTime > voice.next - 3) {
+      schedulePass(voice, false);
+    }
+    var h = new Date().getHours();
+    MusicDB.slots(game).then(function (slots) {
+      var slot = pickSlot(slots, h);
+      if (!slot) {
+        message = game + ' has no tracks';
+        render();
+        return null;
+      }
+      var key = game + '/' + slot;
+      if (voice && voice.key === key) {
+        return null;
+      }
+      loading = key;
+      return loadBuffer(key, game, slot).then(function (buffer) {
+        loading = null;
+        if (paused) {
+          return;
+        }
+        var old = voice;
+        voice = startVoice(key, slot, buffer, old ? cfg.fade : 1.5, slot !== String(h));
+        stopVoice(old, cfg.fade);
+        message = '';
+        render();
+      });
+    }).catch(function (e) {
+      loading = null;
+      message = 'Could not play: ' + (e && e.message ? e.message : e);
+      W.log('music', String(e));
+      render();
+    });
+  }
+
+  function play() {
+    paused = false;
+    W.store.set('music:paused', false);
+    ensureContext();
+    ctx.resume().catch(function () {});
+    update();
+  }
+
+  function pause() {
+    paused = true;
+    W.store.set('music:paused', true);
+    stopVoice(voice, 0.8);
+    voice = null;
+    update();
+  }
+
+  function setGame(dir) {
+    if (!games.length) {
+      return;
+    }
+    var i = games.map(function (g) { return g.game; }).indexOf(game);
+    game = games[(i + dir + games.length) % games.length].game;
+    W.store.set('music:game', game);
+    if (voice) {
+      // Next update() crossfades to the new game.
+      voice.key = '';
+    }
+    update();
+  }
+
+  function setVolume(delta) {
+    volume = Math.max(0, Math.min(1, Math.round((volume + delta) * 10) / 10));
+    W.store.set('music:volume', volume);
+    if (master) {
+      master.gain.setTargetAtTime(volume, ctx.currentTime, 0.05);
+    }
+    render();
+  }
+
+  // ---------- Controls ----------
+  // A tap anywhere plays or pauses. It also counts as the tap the web view may want before playing sound.
+  document.addEventListener('pointerup', function () {
+    if (paused || !ctx || ctx.state !== 'running' || !voice) {
+      play();
+    } else {
+      pause();
+    }
+  });
+
+  Input.on(function (a) {
+    if (!Input.isFocusedView()) {
+      return;
+    }
+    if (a.type === 'a' && typeof a.x !== 'number') {
+      if (paused || !voice) {
+        play();
+      } else {
+        pause();
+      }
+    } else if (a.type === 'dir') {
+      if (a.dir === 'left' || a.dir === 'right') {
+        setGame(a.dir === 'left' ? -1 : 1);
+      } else {
+        setVolume(a.dir === 'up' ? 0.1 : -0.1);
+      }
+    }
+  });
+
+  // Hidden (a game started, the menu closed): pause the audio clock, so it picks up where it was.
+  document.addEventListener('visibilitychange', function () {
+    if (!ctx) {
+      return;
+    }
+    if (document.visibilityState === 'visible') {
+      if (!paused) {
+        ctx.resume().catch(function () {});
+      }
+    } else {
+      ctx.suspend().catch(function () {});
+    }
+    update();
+  });
+
+  // ---------- Start ----------
+  MusicDB.games().then(function (list) {
+    games = list;
+    if (!games.length) {
+      render();
+      return;
+    }
+    if (!games.some(function (g) { return g.game === game; })) {
+      game = games[0].game;
+    }
+    if (!paused) {
+      ensureContext();
+      ctx.resume().catch(function () {});
+    }
+    update();
+  }).catch(function (e) {
+    message = 'Storage unavailable';
+    W.log('music db', String(e));
+    render();
+  });
+
+  setInterval(update, 1000);
+  render();
+})();
+</script>
+</body>
+</html>
