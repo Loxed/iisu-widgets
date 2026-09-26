@@ -48,7 +48,16 @@
         { key: 'location', label: 'Location', type: 'seg', def: 'ip', choices: [['ip', 'Automatic'], ['fixed', 'Choose a city']] },
         { key: 'place', type: 'place', showIf: { location: 'fixed' } },
         { key: 'tempUnit', label: 'Temperature', type: 'seg', def: 'celsius', choices: [['celsius', '°C'], ['fahrenheit', '°F']] },
-        { key: 'windUnit', label: 'Wind', type: 'select', def: 'kmh', choices: [['kmh', 'km/h'], ['mph', 'mph'], ['ms', 'm/s'], ['kn', 'knots']] }
+        { key: 'windUnit', label: 'Wind', type: 'select', def: 'kmh', choices: [['kmh', 'km/h'], ['mph', 'mph'], ['ms', 'm/s'], ['kn', 'knots']] },
+        {
+          key: 'preview', label: 'Preview weather', type: 'select', def: '', previewOnly: true,
+          choices: [['', 'Live weather'], ['clear-day', 'Sunny'], ['clear-night', 'Clear night'], ['mainly-clear', 'Mainly clear'],
+            ['partly-day', 'Partly cloudy'], ['partly-night', 'Partly cloudy, night'], ['overcast', 'Overcast'], ['windy', 'Windy'],
+            ['fog', 'Fog'], ['freezing-fog', 'Freezing fog'], ['drizzle', 'Drizzle'], ['freezing-drizzle', 'Freezing drizzle'],
+            ['rain', 'Rain'], ['heavy-rain', 'Heavy rain'], ['freezing-rain', 'Freezing rain'], ['showers', 'Showers'],
+            ['violent-showers', 'Violent showers'], ['snow', 'Snow'], ['heavy-snow', 'Heavy snow'], ['snow-grains', 'Snow grains'],
+            ['snow-showers', 'Snow showers'], ['thunderstorm', 'Thunderstorm'], ['hail', 'Hailstorm']]
+        }
       ],
       extra: { lat: 48.8566, lon: 2.3522, city: 'Paris', country: 'France' }
     },
@@ -207,8 +216,15 @@
     return fontAvailable[state.font] ? state.font : DEFAULT_FONT;
   }
 
+  // Options that only change the preview on this page (never downloaded or linked).
+  function isPreviewOnly(w, key) {
+    return w.options.some(function (o) {
+      return o.key === key && o.previewOnly;
+    });
+  }
+
   // Full settings for a widget: look (theme, font) plus the widget's own options.
-  function settingsFor(w) {
+  function settingsFor(w, forPreview) {
     var cfg = { theme: state.theme, font: currentFont() };
     if (state.tilt) {
       cfg.tilt = true;
@@ -218,7 +234,9 @@
       cfg.fg = state.fg;
     }
     Object.keys(state.widgets[w.id]).forEach(function (k) {
-      cfg[k] = state.widgets[w.id][k];
+      if (forPreview || !isPreviewOnly(w, k)) {
+        cfg[k] = state.widgets[w.id][k];
+      }
     });
     if (w.id === 'weather' && cfg.location !== 'fixed') {
       delete cfg.lat;
@@ -230,8 +248,8 @@
   }
 
   // Only the values that differ from the defaults go in the link, to keep it short.
-  function query(w) {
-    var cfg = settingsFor(w);
+  function query(w, forPreview) {
+    var cfg = settingsFor(w, forPreview);
     var defs = { font: DEFAULT_FONT, tilt: false };
     w.options.forEach(function (o) {
       defs[o.key] = o.def;
@@ -252,7 +270,7 @@
   function refreshPreview(w) {
     var f = frames[w.id];
     if (f) {
-      f.src = 'widgets/' + w.id + '.html?' + query(w);
+      f.src = 'widgets/' + w.id + '.html?' + query(w, true);
     }
   }
 
@@ -593,6 +611,15 @@
     return seg;
   })());
   document.body.classList.toggle('focused', state.view === 'focused');
+
+  // Global tilt switch.
+  var tiltSwitch = document.getElementById('tilt-switch');
+  tiltSwitch.setAttribute('aria-checked', String(!!state.tilt));
+  tiltSwitch.addEventListener('click', function () {
+    state.tilt = !state.tilt;
+    tiltSwitch.setAttribute('aria-checked', String(state.tilt));
+    refreshAll();
+  });
 
   var cards = document.getElementById('cards');
   GROUPS.forEach(function (g) {
