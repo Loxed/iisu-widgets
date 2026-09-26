@@ -785,6 +785,10 @@ var GW = (function () {
 
     function onSize() {
       layout();
+      // Back to the tile: bring iiSU's music back straight away.
+      if (!focused()) {
+        Sound.duck(false);
+      }
       if (!focused() && real && phase === 'over') {
         start(false);
       }

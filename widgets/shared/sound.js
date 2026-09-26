@@ -62,6 +62,7 @@ var Sound = (function () {
   var duckEl = null;
   var duckOn = false;
   var duckWaiting = false;
+  var duckSrc = null;
 
   // One second of silence as a WAV blob address.
   function silentWav() {
@@ -121,14 +122,31 @@ var Sound = (function () {
         if (!duckEl) {
           duckEl = new Audio();
           duckEl.loop = true;
-          duckEl.src = silentWav();
         }
+        duckEl.src = duckSrc || (duckSrc = silentWav());
         duckPlay();
       } else if (duckEl) {
+        // Pausing alone can keep the audio focus, so the player is emptied too:
+        // that releases the focus and iiSU brings its music back up.
         duckEl.pause();
+        duckEl.removeAttribute('src');
+        duckEl.load();
       }
     } catch (e) {}
   }
+
+  // The page stops drawing frames when it is hidden, so the game loop cannot switch this off
+  // then: release the focus here as soon as the widget is hidden, left or unloaded.
+  function release() {
+    if (document.visibilityState !== 'visible') {
+      duck(false);
+    }
+  }
+  document.addEventListener('visibilitychange', release);
+  window.addEventListener('pagehide', function () {
+    duck(false);
+  });
+  window.addEventListener('blur', release);
 
   return {
     // Lowers iiSU's background music while on is true (see above).

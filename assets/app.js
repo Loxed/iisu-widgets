@@ -169,7 +169,7 @@
     {
       id: 'fire',
       group: 'games',
-      name: 'Game & Watch: Fire!',
+      name: 'Game & Watch: Fire',
       desc: 'Move the firemen\'s net so the jumpers bounce three times into the ambulance. Game B adds a second floor. The tile shows the clock while the game plays itself.',
       credits: [
         { name: 'Game & Watch: Fire', by: 'Nintendo', note: 'original game (1980)' },
