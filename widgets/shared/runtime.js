@@ -13,7 +13,8 @@ var W = (function () {
     bg: '#414344',        // custom theme only
     fg: '#ffffff',        // custom theme only
     font: 'cal-sans',     // see fonts.js
-    tilt: false           // move the widget's content slightly when the handheld tilts
+    tilt: false,          // move the widget's content slightly when the handheld tilts
+    resize: 'fade'        // animation when iiSU resizes the widget: none or fade
   };
 
   function log() {
@@ -87,7 +88,93 @@ var W = (function () {
     if (cfg.tilt) {
       tilt();
     }
+    watchResize(cfg.resize);
     return cfg;
+  }
+
+  // ---------- Resize animation ----------
+  // iiSU resizes a widget when it is focused (tile to full view) and back.
+  // fade: the content fades out, the widget resizes with only its background showing,
+  // and the content fades back in once the size has settled.
+  var RESIZE = {
+    fadeOut: 100,   // ms to hide the content
+    settle: 160,    // ms without a size change before the resize counts as finished
+    fadeIn: 260     // ms to show the content again
+  };
+  var resizeHandlers = [];
+
+  function onResize(handler) {
+    resizeHandlers.push(handler);
+  }
+
+  function watchResize(mode) {
+    var root = document.getElementById('root');
+    if (!root || !window.ResizeObserver) {
+      return;
+    }
+    var last = null;
+    var settleTimer = null;
+    var restoreTimer = null;
+    var hidden = false;
+
+    function content() {
+      return Array.prototype.slice.call(root.children);
+    }
+
+    function hide() {
+      clearTimeout(restoreTimer);
+      if (hidden) {
+        return;
+      }
+      hidden = true;
+      document.documentElement.classList.add('resizing');
+      content().forEach(function (el) {
+        el.style.transition = 'opacity ' + RESIZE.fadeOut + 'ms ease-out';
+        el.style.opacity = '0';
+      });
+    }
+
+    function show() {
+      hidden = false;
+      document.documentElement.classList.remove('resizing');
+      content().forEach(function (el) {
+        el.style.transition = 'opacity ' + RESIZE.fadeIn + 'ms ease-in';
+        el.style.opacity = '';
+      });
+      // Give back the widget's own transitions once the fade is done.
+      restoreTimer = setTimeout(function () {
+        content().forEach(function (el) {
+          el.style.transition = '';
+        });
+      }, RESIZE.fadeIn + 50);
+    }
+
+    new ResizeObserver(function (entries) {
+      var box = entries[0].contentRect;
+      var size = { w: Math.round(box.width), h: Math.round(box.height) };
+      // The first report is the starting size, not a resize.
+      if (!last) {
+        last = size;
+        return;
+      }
+      if (Math.abs(size.w - last.w) < 2 && Math.abs(size.h - last.h) < 2) {
+        return;
+      }
+      last = size;
+      resizeHandlers.forEach(function (h) {
+        try {
+          h(size);
+        } catch (e) {
+          log('resize handler failed', String(e));
+        }
+      });
+      if (mode !== 'fade') {
+        return;
+      }
+      hide();
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(show, Math.max(RESIZE.settle, RESIZE.fadeOut));
+    }).observe(document.documentElement);
   }
 
   // Tilt parallax. Sets --tilt-x and --tilt-y (from -1 to 1) on the page, smoothed.
@@ -248,5 +335,5 @@ var W = (function () {
     return document.getElementById(id);
   }
 
-  return { log: log, config: config, store: store, fetchJson: fetchJson, icon: icon, tilt: tilt, $: $ };
+  return { log: log, config: config, store: store, fetchJson: fetchJson, icon: icon, tilt: tilt, onResize: onResize, $: $ };
 })();

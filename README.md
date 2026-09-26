@@ -11,7 +11,7 @@ Web widgets and mini games for the iiSU launcher, with a configurator page to se
 
 Themes: light, dark, aurora (gradient with film grain), transparent and custom colors.
 
-Every widget can use the **tilt effect** (content moves slightly with the motion sensor), set once for all widgets.
+The Scene widget moves its layers with the handheld's motion sensor. The global tilt effect is disabled in the configurator; the code stays in `runtime.js` and can still be tried with `?tilt=true`.
 
 Open the configurator on GitHub Pages, pick a theme, set up each widget and press **Download**. The downloaded file contains everything: settings, font, icons and code. It needs no editing and works offline.
 
@@ -43,9 +43,18 @@ To publish: push to GitHub, then go to Settings > Pages and deploy from the `mai
 
 Settings are read in this order, later ones win:
 
-1. the defaults in `runtime.js` (`theme`, `bg`, `fg`, `font`, `tilt`) and in the widget
+1. the defaults in `runtime.js` (`theme`, `bg`, `fg`, `font`, `tilt`, `resize`) and in the widget
 2. the JSON in `<script id="widget-config">` (written on download)
 3. the page address: `widgets/weather.html?theme=dark&tempUnit=fahrenheit`
+
+## Resize animation
+
+iiSU resizes a widget when it is focused (tile to full view) and back. `runtime.js` watches the size with a `ResizeObserver` and applies the `resize` setting:
+
+- `none`: the layout switches straight away.
+- `fade` (default): the content (every child of `#root`) fades out in 100 ms, the widget resizes showing only its background, and the content fades back in over 260 ms once the size has not changed for 160 ms. The timings are in `RESIZE` in `runtime.js`.
+
+Widgets can also react to a resize with `W.onResize(function (size) { ... })`.
 
 ## Fonts
 
@@ -67,7 +76,7 @@ To add another font: put its file in `fonts/` (only if its license allows redist
 - Touch reaches the widget whether it is focused or not. The controller is readable through the Gamepad API. Keyboard events do not arrive.
 - Geolocation is denied: automatic weather uses IP location (GeoJS).
 - Sound, vibration, motion sensor and battery level are available. Battery time remaining is not.
-- Bluetooth devices: a web view cannot list paired Bluetooth devices or read their battery (no Web Bluetooth in Android WebView). The Devices widget shows the handheld's battery and the controllers the Gamepad API reports, without their battery level.
+- Bluetooth devices: a web view cannot list paired Bluetooth devices or read their battery (no Web Bluetooth in Android WebView). The Devices widget shows the handheld's battery, the controllers the Gamepad API reports, and headphones found by name (`enumerateDevices`, when the web view shares names) or by the extra delay of Bluetooth audio (`AudioContext.outputLatency` above `btLatency`, 120 ms by default). None of them has a battery level. The Audio page of `tools/widget-probe.html` shows the raw readings, to calibrate `btLatency`.
 - The widget is 198×198 as a tile and fills most of the screen when focused. Games use this to know when they can take the controller: on the tile, the same buttons move around the iiSU menu.
 
 ## Not tested on the handheld yet

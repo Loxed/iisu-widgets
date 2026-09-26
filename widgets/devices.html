@@ -166,7 +166,10 @@
     fill: 'yellow',          // yellow, green or theme
     lowAt: 20,               // below this level (%) a pill turns red
     controllers: true,       // list connected controllers
-    builtIn: false           // also list the handheld's own built-in controls
+    builtIn: false,          // also list the handheld's own built-in controls
+    audio: true,             // detect headphones and other audio devices
+    btLatency: 120,          // audio delay (ms) above which sound is assumed to go to Bluetooth
+    debug: false             // show the raw audio readings in the header
   });
 
   document.documentElement.classList.add('fill-' + cfg.fill);
@@ -175,6 +178,8 @@
   var BUILT_IN = /retroid|odin|ayn |ayaneo|anbernic|thor|built-?in|gpio|internal/i;
   var battery = null;
   var pads = [];
+  var audioDevices = [];     // [{ kind: 'headphones' | 'speaker' | 'audio', name }]
+  var audioDebug = '';
 
   function shortName(id) {
     var name = id.replace(/\(.*?\)/g, '').replace(/\b(wireless|controller|gamepad|bluetooth|xinput|standard)\b/gi, '').replace(/\s+/g, ' ').trim();
@@ -221,11 +226,17 @@
         html += pill({ icon: 'bluetooth', name: 'Controllers', level: null, text: 'Press any button', waiting: true });
       }
     }
+    if (cfg.audio) {
+      audioDevices.slice(0, 2).forEach(function (a) {
+        html += pill({ icon: a.kind === 'speaker' ? 'speaker' : 'headphones', name: a.name, level: null, text: 'On' });
+        count++;
+      });
+    }
     if (!html) {
       html = '<div class="hint">No battery information here.</div>';
     }
     W.$('pills').innerHTML = html;
-    W.$('summary').textContent = count + ' connected';
+    W.$('summary').textContent = cfg.debug && audioDebug ? audioDebug : count + ' connected';
   }
 
   // Controllers only show up in the Gamepad API after one of their buttons is pressed.
@@ -251,6 +262,110 @@
   window.addEventListener('gamepaddisconnected', scanPads);
   setInterval(scanPads, 2000);
   scanPads();
+
+  // ---------- Audio devices ----------
+  // Android's web view gives no direct list of Bluetooth devices. Two signals are used instead:
+  // 1. Device names from mediaDevices.enumerateDevices(), when the web view shares them.
+  // 2. Audio delay: Bluetooth audio adds about 100 to 250 ms that the built-in speaker does not.
+  //    Wired headphones have no extra delay, so they are only found by name.
+  var HEADPHONES = /head(phone|set)|earbud|earphone|airpods|buds|\bwh-|\bwf-|bose|beats|jabra|sennheiser|galaxy buds|pixel buds|nothing ear/i;
+  var SPEAKER = /speaker|soundbar|jbl|boom|sonos|marshall/i;
+  var IGNORE = /^(default|communications)$/;
+
+  function listDevices() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      return Promise.resolve([]);
+    }
+    return navigator.mediaDevices.enumerateDevices().catch(function () {
+      return [];
+    });
+  }
+
+  // Plays silence for a moment and reads how late the sound reaches the output.
+  function measureDelay() {
+    return new Promise(function (resolve) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) {
+        resolve(null);
+        return;
+      }
+      var ctx;
+      try {
+        ctx = new AC();
+        var gain = ctx.createGain();
+        gain.gain.value = 0;
+        var osc = ctx.createOscillator();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+      } catch (e) {
+        resolve(null);
+        return;
+      }
+      setTimeout(function () {
+        var out = typeof ctx.outputLatency === 'number' ? ctx.outputLatency : null;
+        var base = typeof ctx.baseLatency === 'number' ? ctx.baseLatency : null;
+        try {
+          ctx.close();
+        } catch (e) {}
+        resolve({ output: out, base: base, state: ctx.state });
+      }, 700);
+    });
+  }
+
+  var scanning = false;
+
+  function scanAudio() {
+    if (!cfg.audio || scanning || document.visibilityState !== 'visible') {
+      return;
+    }
+    scanning = true;
+    Promise.all([listDevices(), measureDelay()]).then(function (r) {
+      var list = r[0];
+      var delay = r[1];
+      var found = [];
+      var seen = {};
+      list.forEach(function (d) {
+        if ((d.kind !== 'audiooutput' && d.kind !== 'audioinput') || IGNORE.test(d.deviceId) || !d.label) {
+          return;
+        }
+        var name = d.label.replace(/\(.*?\)/g, '').trim();
+        var kind = HEADPHONES.test(name) ? 'headphones' : SPEAKER.test(name) ? 'speaker' : null;
+        if (kind && !seen[name]) {
+          seen[name] = true;
+          found.push({ kind: kind, name: name });
+        }
+      });
+      var ms = delay && delay.output !== null ? Math.round(delay.output * 1000) : null;
+      if (!found.length && ms !== null && ms >= cfg.btLatency) {
+        found.push({ kind: 'headphones', name: 'Bluetooth audio' });
+      }
+      var outs = list.filter(function (d) { return d.kind === 'audiooutput'; }).length;
+      var ins = list.filter(function (d) { return d.kind === 'audioinput'; }).length;
+      audioDebug = 'out ' + (ms === null ? '?' : ms + 'ms') + ' · base ' + (delay && delay.base !== null ? Math.round(delay.base * 1000) + 'ms' : '?') +
+                   ' · ' + outs + ' out, ' + ins + ' in' + (list.some(function (d) { return d.label; }) ? ', named' : '');
+      var changed = JSON.stringify(found) !== JSON.stringify(audioDevices);
+      audioDevices = found;
+      if (changed || cfg.debug) {
+        render();
+      }
+    }).then(function () {
+      scanning = false;
+    }, function () {
+      scanning = false;
+    });
+  }
+
+  if (cfg.audio) {
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+      navigator.mediaDevices.addEventListener('devicechange', function () {
+        setTimeout(scanAudio, 800);
+      });
+    }
+    document.addEventListener('visibilitychange', scanAudio);
+    setInterval(scanAudio, 30000);
+    scanAudio();
+  }
 
   if (navigator.getBattery) {
     navigator.getBattery().then(function (b) {

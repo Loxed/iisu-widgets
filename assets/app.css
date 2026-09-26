@@ -150,6 +150,8 @@ input[type="color"] {
   background: transparent;
   /* Must match the widget pages' color scheme, or Chrome paints a white backdrop behind them. */
   color-scheme: normal;
+  /* Animate Tile/Focused switches like iiSU does, so the resize animation can be seen. */
+  transition: width 320ms ease, height 320ms ease;
 }
 
 body.focused .preview iframe {

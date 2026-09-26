@@ -78,11 +78,12 @@
       id: 'devices',
       group: 'device',
       name: 'Devices',
-      desc: 'Battery pills for the handheld and the controllers connected to it. Controllers appear after you press one of their buttons.',
+      desc: 'Battery pills for the handheld, plus the controllers and headphones connected to it. Controllers appear after you press one of their buttons.',
       options: [
         { key: 'fill', label: 'Fill color', type: 'seg', def: 'yellow', choices: [['yellow', 'Yellow'], ['green', 'Green'], ['theme', 'Theme']] },
         { key: 'controllers', label: 'Show controllers', type: 'switch', def: true },
-        { key: 'builtIn', label: 'Include built-in controls', type: 'switch', def: false, showIf: { controllers: true } }
+        { key: 'builtIn', label: 'Include built-in controls', type: 'switch', def: false, showIf: { controllers: true } },
+        { key: 'audio', label: 'Show headphones', type: 'switch', def: true }
       ]
     },
     {
@@ -139,7 +140,7 @@
 
   var SAVE_KEY = 'iisu-configurator';
   var DEFAULT_FONT = 'cal-sans';
-  var state = { theme: 'dark', font: DEFAULT_FONT, tilt: false, bg: '#414344', fg: '#ffffff', view: 'tile', widgets: {} };
+  var state = { theme: 'dark', font: DEFAULT_FONT, tilt: false, resize: 'fade', bg: '#414344', fg: '#ffffff', view: 'tile', widgets: {} };
   var fontAvailable = { 'cal-sans': true };
 
   WIDGETS.forEach(function (w) {
@@ -158,7 +159,8 @@
   try {
     var saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
     if (saved) {
-      ['theme', 'font', 'tilt', 'bg', 'fg', 'view'].forEach(function (k) {
+      // 'tilt' is no longer restored: its switch was removed, so a saved 'on' could not be turned off.
+      ['theme', 'font', 'resize', 'bg', 'fg', 'view'].forEach(function (k) {
         if (saved[k] !== undefined) {
           state[k] = saved[k];
         }
@@ -228,7 +230,7 @@
 
   // Full settings for a widget: look (theme, font) plus the widget's own options.
   function settingsFor(w, forPreview) {
-    var cfg = { theme: state.theme, font: currentFont() };
+    var cfg = { theme: state.theme, font: currentFont(), resize: state.resize };
     if (state.tilt) {
       cfg.tilt = true;
     }
@@ -253,7 +255,7 @@
   // Only the values that differ from the defaults go in the link, to keep it short.
   function query(w, forPreview) {
     var cfg = settingsFor(w, forPreview);
-    var defs = { font: DEFAULT_FONT, tilt: false };
+    var defs = { font: DEFAULT_FONT, tilt: false, resize: 'fade' };
     w.options.forEach(function (o) {
       defs[o.key] = o.def;
     });
@@ -614,6 +616,14 @@
     return seg;
   })());
   document.body.classList.toggle('focused', state.view === 'focused');
+
+  // Resize animation, shared by every widget. Switching Preview between Tile and Focused shows it.
+  var resizeSeg = segmented([['none', 'None'], ['fade', 'Fade']], state.resize, function (v) {
+    state.resize = v;
+    refreshAll();
+  });
+  resizeSeg.id = 'resize-seg';
+  document.getElementById('resize-seg').replaceWith(resizeSeg);
 
   var cards = document.getElementById('cards');
   GROUPS.forEach(function (g) {

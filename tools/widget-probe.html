@@ -149,7 +149,7 @@
 <script>
 (function () {
   var PAGE_MS = 6000;
-  var GROUPS = ['Storage', 'Input', 'Device', 'Network', 'Page', 'Bridges'];
+  var GROUPS = ['Audio', 'Storage', 'Input', 'Device', 'Network', 'Page', 'Bridges'];
   var rows = {};
   var order = [];
   var page = 0;
@@ -612,6 +612,67 @@
     });
   }
 
+  // ---------- Audio (headphones detection) ----------
+  // Re-measured every 5 s: connect or remove headphones and watch the values change.
+  function probeAudio() {
+    var changes = 0;
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+      navigator.mediaDevices.addEventListener('devicechange', function () {
+        changes++;
+        set('Audio', 'Device changes', 'ok', changes + ' since load');
+      });
+      set('Audio', 'Device changes', 'pending', '0, plug or pair headphones');
+    } else {
+      set('Audio', 'Device changes', 'no', 'no event');
+    }
+    set('Audio', 'Pick output', typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype ? 'ok' : 'no', 'setSinkId ' + ('setSinkId' in HTMLMediaElement.prototype ? 'yes' : 'no'));
+
+    function measure() {
+      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        navigator.mediaDevices.enumerateDevices().then(function (list) {
+          var kinds = {};
+          var labels = [];
+          list.forEach(function (d) {
+            kinds[d.kind] = (kinds[d.kind] || 0) + 1;
+            if (d.label && d.kind !== 'videoinput') {
+              labels.push(d.label);
+            }
+          });
+          set('Audio', 'Outputs', kinds.audiooutput ? 'ok' : 'warn', (kinds.audiooutput || 0) + ' listed');
+          set('Audio', 'Inputs', kinds.audioinput ? 'ok' : 'warn', (kinds.audioinput || 0) + ' listed');
+          set('Audio', 'Names', labels.length ? 'ok' : 'no', labels.length ? labels.join(', ') : 'hidden');
+        }).catch(function (e) {
+          set('Audio', 'Outputs', 'no', errText(e));
+        });
+      } else {
+        set('Audio', 'Outputs', 'no', 'no API');
+      }
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        var ctx = new AC();
+        var g = ctx.createGain();
+        g.gain.value = 0;
+        var o = ctx.createOscillator();
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start();
+        setTimeout(function () {
+          var out = typeof ctx.outputLatency === 'number' ? Math.round(ctx.outputLatency * 1000) + ' ms' : 'not reported';
+          var base = typeof ctx.baseLatency === 'number' ? Math.round(ctx.baseLatency * 1000) + ' ms' : 'not reported';
+          set('Audio', 'Output delay', typeof ctx.outputLatency === 'number' ? 'ok' : 'no', out + ' (' + ctx.state + ')');
+          set('Audio', 'Base delay', typeof ctx.baseLatency === 'number' ? 'ok' : 'no', base);
+          try {
+            ctx.close();
+          } catch (e) {}
+        }, 700);
+      } catch (e) {
+        set('Audio', 'Output delay', 'no', errText(e));
+      }
+    }
+    measure();
+    setInterval(measure, 5000);
+  }
+
   function run(fn, name) {
     try {
       fn();
@@ -620,6 +681,7 @@
     }
   }
 
+  run(probeAudio, 'audio');
   run(probeStorage, 'storage');
   run(probeInput, 'input');
   run(probeDevice, 'device');
