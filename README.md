@@ -11,7 +11,7 @@ Web widgets and mini games for the iiSU launcher, with a configurator page to se
 
 Every widget can use the **tilt effect** (content moves slightly with the motion sensor), set once for all widgets.
 
-Open the configurator on GitHub Pages, pick a theme and font, set up each widget and press **Download**. The downloaded file contains everything: settings, font, icons and code. It needs no editing and works offline.
+Open the configurator on GitHub Pages, pick a theme, set up each widget and press **Download**. The downloaded file contains everything: settings, font, icons and code. It needs no editing and works offline.
 
 ## Fully static
 
@@ -43,13 +43,13 @@ Settings are read in this order, later ones win:
 
 1. the defaults in `runtime.js` (`theme`, `bg`, `fg`, `font`, `tilt`) and in the widget
 2. the JSON in `<script id="widget-config">` (written on download)
-3. the page address: `widgets/weather.html?theme=dark&font=console-sans&tempUnit=fahrenheit`
+3. the page address: `widgets/weather.html?theme=dark&tempUnit=fahrenheit`
 
 ## Fonts
 
-iiSU can use three fonts. Cal Sans is the default and is included (SIL Open Font License, see `fonts/Cal-Sans-OFL.txt`).
+Widgets use Cal Sans, iiSU's default font (SIL Open Font License, see `fonts/Cal-Sans-OFL.txt`). It is embedded in every download, so it works offline.
 
-Console Sans (by PuzzylPiece) and Arctanium are listed but not included. To enable one, add its file to `fonts/` as `console-sans.woff2` or `arctanium.woff2`, **only if its license allows redistribution**. If you use another format (`.woff`, `.ttf`, `.otf`), change the file name in `widgets/shared/fonts.js`. The configurator shows a font as unavailable until its file is there.
+To add another font: put its file in `fonts/` (only if its license allows redistribution) and add an entry to `widgets/shared/fonts.js`. The configurator shows a font picker as soon as there are two fonts or more.
 
 ## Adding a widget
 

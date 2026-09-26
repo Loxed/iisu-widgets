@@ -12,7 +12,7 @@ var W = (function () {
     theme: 'light',       // light, dark, transparent, custom
     bg: '#414344',        // custom theme only
     fg: '#ffffff',        // custom theme only
-    font: 'cal-sans',     // cal-sans, console-sans, arctanium (see fonts.js)
+    font: 'cal-sans',     // see fonts.js
     tilt: false           // move the widget's content slightly when the handheld tilts
   };
 

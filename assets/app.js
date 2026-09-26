@@ -543,6 +543,10 @@
   });
   fontSeg.id = 'font-seg';
   document.getElementById('font-seg').replaceWith(fontSeg);
+  // With a single font there is nothing to pick.
+  if (Object.keys(FONTS).length < 2) {
+    document.getElementById('font-field').classList.add('hidden');
+  }
   fontNote.textContent = FONTS[currentFont()].note;
   Array.prototype.forEach.call(fontSeg.children, function (b, i) {
     var id = Object.keys(FONTS)[i];

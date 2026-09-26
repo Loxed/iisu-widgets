@@ -17,6 +17,7 @@
 
 body {
   margin: 0;
+  -webkit-tap-highlight-color: transparent;
   background: var(--page);
   color: var(--text);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -88,6 +89,7 @@ h1 {
 }
 
 .seg button {
+  min-height: 36px;
   border: 0;
   background: transparent;
   color: var(--text);
@@ -146,6 +148,8 @@ input[type="color"] {
   width: 198px;
   height: 198px;
   background: transparent;
+  /* Must match the widget pages' color scheme, or Chrome paints a white backdrop behind them. */
+  color-scheme: normal;
 }
 
 body.focused .preview iframe {
@@ -370,13 +374,129 @@ section.help strong {
   color: var(--text);
 }
 
-@media (max-width: 420px) {
+/* ---------- Small screens ---------- */
+
+.btn {
+  min-height: 46px;
+}
+
+/* The settings bar only sticks on screens with room for it. */
+@media (max-width: 700px), (max-height: 620px) {
+  .bar {
+    position: static;
+  }
+}
+
+/* Phones and handhelds held upright (9:16) */
+@media (max-width: 600px) {
+  main {
+    padding: 20px 16px 48px;
+  }
+
+  h1 {
+    font-size: 28px;
+  }
+
+  /* Theme on its own row, the smaller settings side by side below it. */
+  .bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 12px;
+  }
+
+  .bar > .field-inline:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .field-inline {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .seg {
+    max-width: 100%;
+  }
+
   .grid {
     grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .preview {
+    height: 240px;
   }
 
   body.focused .preview iframe {
-    width: 290px;
-    height: 154px;
+    width: min(316px, calc(100vw - 64px));
+    height: auto;
+    aspect-ratio: 316 / 168;
+  }
+
+  .opt {
+    min-height: 40px;
+  }
+
+  .opt .seg button {
+    padding: 6px 11px;
+  }
+
+  .group-title {
+    font-size: 23px;
+  }
+}
+
+/* Short landscape screens (16:9 handhelds and phones on their side):
+   the preview sits beside the settings instead of above them. */
+@media (orientation: landscape) and (max-height: 620px) {
+  main {
+    padding: 16px 20px 40px;
+  }
+
+  header.top {
+    margin-bottom: 12px;
+  }
+
+  h1 {
+    font-size: 26px;
+  }
+
+  .bar {
+    padding: 8px 0;
+    margin-bottom: 14px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(560px, 1fr));
+    gap: 16px;
+  }
+
+  .card {
+    flex-direction: row;
+  }
+
+  .preview {
+    flex: 0 0 40%;
+    height: auto;
+    min-height: 230px;
+    padding: 12px;
+  }
+
+  body.focused .preview iframe {
+    width: 100%;
+    max-width: 316px;
+    height: auto;
+    aspect-ratio: 316 / 168;
+  }
+
+  .body {
+    padding: 14px 16px 16px;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .desc {
+    margin-top: -6px;
   }
 }

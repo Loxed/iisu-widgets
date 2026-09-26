@@ -1,6 +1,6 @@
-// Fonts iiSU uses. Used by the widgets (hosted links) and by the configurator (downloads).
+// Fonts for the widgets. Used by the widgets (hosted links) and by the configurator (downloads).
 // Files live in /fonts. To add a font: drop its file(s) there and add an entry below.
-// A font whose file is missing is shown as unavailable in the configurator.
+// The configurator shows the font picker once there are two fonts or more.
 var FONTS = {
   'cal-sans': {
     name: 'Cal Sans',
@@ -10,18 +10,6 @@ var FONTS = {
       { src: 'cal-sans-latin.woff2', range: 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD' },
       { src: 'cal-sans-latin-ext.woff2', range: 'U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF' }
     ]
-  },
-  'console-sans': {
-    name: 'Console Sans',
-    note: 'iiSU legacy, by PuzzylPiece',
-    family: 'Console Sans',
-    files: [{ src: 'console-sans.woff2' }]
-  },
-  'arctanium': {
-    name: 'Arctanium',
-    note: '',
-    family: 'Arctanium',
-    files: [{ src: 'arctanium.woff2' }]
   }
 };
 
