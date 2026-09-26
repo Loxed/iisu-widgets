@@ -1,6 +1,8 @@
 :root {
-  --page: #1b1c1e;
-  --card: #2a2b2e;
+  --page: #101017;
+  /* Glass surfaces: translucent, blurring what is behind them (like iisu.network). */
+  --card: rgba(24, 25, 31, 0.72);
+  --glass-line: rgba(255, 255, 255, 0.06);
   --card-2: #333437;
   --line: #3d3e42;
   --text: #ffffff;
@@ -17,8 +19,11 @@
 
 body {
   margin: 0;
+  position: relative;
+  min-height: 100vh;
   -webkit-tap-highlight-color: transparent;
-  background: var(--page);
+  /* Dark page with a faint dot grid, as on iisu.network. */
+  background: var(--page) radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 0) 0 0 / 14px 14px;
   color: var(--text);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: 15px;
@@ -39,12 +44,66 @@ main {
   padding: 32px 16px 64px;
 }
 
+/* ---------- Top of the page ---------- */
+.topnav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 54px;
+  padding: 6px 6px 6px 18px;
+  margin-bottom: 40px;
+  background: var(--card);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 1px var(--glass-line) inset;
+}
+
+.brand {
+  font-family: 'Cal Sans', system-ui, sans-serif;
+  font-size: 20px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.brand span {
+  color: var(--muted);
+}
+
+.topnav nav {
+  display: flex;
+  gap: 4px;
+}
+
+.topnav nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 9px 14px;
+  border-radius: 12px;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.topnav nav a:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.topnav nav a[aria-current="page"] {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+}
+
 header.top {
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 h1 {
-  font-size: 34px;
+  font-size: 40px;
+  line-height: 1.1;
 }
 
 .lede {
@@ -56,16 +115,19 @@ h1 {
 /* Global bar */
 .bar {
   position: sticky;
-  top: 0;
+  top: 12px;
   z-index: 5;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 20px;
-  padding: 12px 0;
-  margin-bottom: 20px;
-  background: var(--page);
-  border-bottom: 1px solid var(--line);
+  gap: 12px 24px;
+  padding: 10px 16px;
+  margin-bottom: 32px;
+  background: rgba(20, 21, 27, 0.82);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 1px var(--glass-line) inset, 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
 .field-inline {
@@ -122,6 +184,8 @@ input[type="color"] {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
   gap: 24px;
   background: var(--card);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   border-radius: var(--radius);
   padding: 20px;
   margin: -6px 0 24px;
@@ -372,27 +436,6 @@ input[type="color"] {
 }
 
 /* ---------- Page links ---------- */
-.site-nav {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 18px;
-}
-
-.site-nav a {
-  color: var(--muted);
-  text-decoration: none;
-  font-size: 14px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: var(--card-2);
-}
-
-.site-nav a[aria-current="page"] {
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 600;
-}
-
 /* ---------- Credits bubble ---------- */
 .title-row {
   display: flex;
@@ -472,6 +515,9 @@ input[type="color"] {
 
 .card {
   background: var(--card);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 0 0 1px var(--glass-line) inset;
   border-radius: var(--radius);
   /* Not hidden: the Credits bubble may reach past the card. The preview clips itself. */
   overflow: visible;
@@ -698,6 +744,8 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 section.help {
   margin-top: 40px;
   background: var(--card);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   border-radius: var(--radius);
   padding: 20px;
 }
@@ -744,7 +792,20 @@ section.help strong {
   }
 
   h1 {
-    font-size: 28px;
+    font-size: 30px;
+  }
+
+  .topnav {
+    margin-bottom: 28px;
+    padding-left: 14px;
+  }
+
+  .brand {
+    font-size: 18px;
+  }
+
+  .topnav nav a {
+    padding: 8px 11px;
   }
 
   /* Theme on its own row, the smaller settings side by side below it. */
@@ -753,6 +814,7 @@ section.help strong {
     grid-template-columns: 1fr 1fr;
     align-items: start;
     gap: 12px;
+    padding: 14px;
   }
 
   .bar > .field-inline:first-child {
@@ -817,13 +879,17 @@ section.help strong {
     margin-bottom: 12px;
   }
 
+  .topnav {
+    margin-bottom: 18px;
+  }
+
   h1 {
     font-size: 26px;
   }
 
   .bar {
-    padding: 8px 0;
-    margin-bottom: 14px;
+    padding: 8px 12px;
+    margin-bottom: 16px;
   }
 
   .grid {
