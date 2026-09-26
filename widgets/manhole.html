@@ -7,20 +7,11 @@
 <link rel="stylesheet" href="shared/base.css" data-inline>
 <style>
   #root {
-    gap: 4cqmin;
+    gap: 3cqmin;
   }
 
   :root.tilt #root > * {
     --depth: 0;
-  }
-
-  #scores {
-    display: flex;
-    gap: 5cqmin;
-  }
-
-  #score {
-    display: none;
   }
 
   #stage {
@@ -40,22 +31,10 @@
     position: absolute;
     inset: 0;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2cqmin;
     text-align: center;
     pointer-events: none;
-  }
-
-  #overlay .big {
-    font-size: 11cqmin;
-    font-weight: 600;
-  }
-
-  #overlay .small {
-    font-size: 5.5cqmin;
-    color: var(--muted);
   }
 
   #overlay.hidden {
@@ -66,21 +45,42 @@
     padding: 3cqmin 6cqmin;
     border-radius: 4cqmin;
     background: var(--bg);
-    box-shadow: 0 1cqmin 4cqmin rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1cqmin 4cqmin rgba(0, 0, 0, 0.25);
   }
 
   :root[data-theme="transparent"] #overlay .box {
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  #overlay .big {
+    font-size: 9cqmin;
+    font-weight: 600;
+  }
+
+  #overlay .small {
+    font-size: 4.5cqmin;
+    color: var(--muted);
   }
 
   @container (min-aspect-ratio: 3/2) {
     #root {
-      padding: 5cqmin 8cqmin;
+      padding: 4cqmin 7cqmin;
     }
+  }
 
-    #score {
-      display: inline;
-    }
+  /* Tile: the game screen is the whole widget, no title, hint or theme background. */
+  :root.gw-tile header {
+    display: none;
+  }
+
+  :root.gw-tile #root {
+    padding: 0;
+    background: transparent;
+  }
+
+  :root.gw-tile #root::before,
+  :root.gw-tile #root::after {
+    display: none;
   }
 </style>
 </head>
@@ -88,11 +88,11 @@
 <div id="root">
   <header class="row">
     <span class="title">Manhole</span>
-    <span id="scores" class="label"><span id="score">Score 0</span><span id="best">Best 0</span></span>
+    <span id="best" class="label"></span>
   </header>
   <div id="stage">
     <canvas id="board"></canvas>
-    <div id="overlay"><div class="box"><div class="big" id="msg-big"></div><div class="small" id="msg-small"></div></div></div>
+    <div id="overlay" class="hidden"><div class="box"><div class="big" id="msg-big"></div><div class="small" id="msg-small"></div></div></div>
   </div>
 </div>
 
@@ -102,281 +102,243 @@
 <script src="shared/runtime.js" data-inline></script>
 <script src="shared/input.js" data-inline></script>
 <script src="shared/sound.js" data-inline></script>
+<script src="shared/gw.js" data-inline></script>
 <script>
+// Manhole (Game & Watch, 1981). Rules of the original:
+// - People walk along two walkways with two open manholes each, the top one left to right,
+//   the bottom one right to left.
+// - You hold the one lid under whichever manhole you choose: up, down, left and right pick it,
+//   like the four buttons of the Gold version. On the touch screen, tap the manhole.
+// - 1 point each time someone steps over the lid. Someone stepping into an open manhole is a miss.
+// - At 300 points: with no misses, points count double until the next miss; otherwise the misses
+//   are cleared. Three misses end the game.
+// - The game gets faster as the score grows. Game B: more people at once.
 (function () {
-  // Game & Watch Manhole: walkers cross a path with four open manholes.
-  // You hold the lid over one hole at a time; anyone who steps on an open
-  // hole falls in. One point per walker who makes it across. Three falls = over.
-  //
-  // --- ASSET SHEET ---------------------------------------------------------
-  // All sizes are in grid cells. The grid is 20 x 10.
-  // Every sprite is currently a dashed placeholder box drawn by drawAsset().
-  // To add pixel art: draw inside the box passed to drawAsset, using name and
-  // frame to pick the sprite.
-  //
-  //   name     size         frames / notes
-  //   path     20.0 x 2.4   the walkway strip in the middle, background
-  //   hole     2.4 x 1.8    an open manhole (drawn 4 times, dark)
-  //   lid      2.4 x 1.0    the lid, drawn over the covered hole
-  //   walker   1.1 x 1.6    frames: 'walk-l', 'walk-r' (two-step animation)
-  //   tunnel   3.0 x 1.6    under each hole, drawn when the lid is elsewhere
-  //   miss     0.9 x 0.9    one shown per miss (max 3), top right
-  // -------------------------------------------------------------------------
-
   var cfg = W.config({
-    speed: 'normal',   // slow, normal or fast (walker speed)
-    sound: true
+    mode: 'a',          // a or b
+    speed: 'normal',    // slow, normal or fast
+    look: 'lcd',        // lcd (grey green LCD) or theme (the widget theme's colors)
+    sound: true,
+    skin: '',           // address of a skin JSON file (see shared/gw.js)
+    outline: false      // show every segment's box and id, to make a skin
   });
 
-  var SPEEDS = { slow: 0.24, normal: 0.3, fast: 0.38 };
-  var COLS = 20, ROWS = 10;
-  var PATH_Y = 5.2;                 // top of the path strip
-  var PATH_H = 2.4;
-  var HOLES = [3, 7.5, 12, 16.5];   // hole centers, in cells
-  var HOLE_W = 2.4;
-  var WALK_Y = 3.6;                 // top of a walker sprite (feet on the path)
-  var W_W = 1.1, W_H = 1.6;
+  var D = GW.draw;
+  var HOLE_X = [96, 224];            // left and right manholes, on both walkways
+  var STREET_Y = [80, 158];          // where the walkers' feet are
+  var XS = [32, 64, 96, 128, 160, 192, 224, 256, 288];
+  // Walkway 0 goes left to right, walkway 1 right to left. Holes: 0 top left, 1 top right,
+  // 2 bottom left, 3 bottom right (street * 2 + side).
+  var PATHS = [XS, XS.slice().reverse()];
+  var PREFIX = ['u-', 'l-'];
 
-  var BEST_KEY = 'manhole:best';
-  var canvas = W.$('board');
-  var ctx = canvas.getContext('2d');
-
-  var cell = 10, offX = 0, offY = 0;
-  var walkers = [];
-  var lid = 1;           // index into HOLES
-  var spawnTimer = 16;
-  var score = 0;
-  var misses = 0;
-  var best = W.store.get(BEST_KEY) || 0;
-  var state = 'ready';   // ready, playing, paused, over
-  var lastTick = 0;
-  var colors = {};
-
-  function readColors() {
-    var cs = getComputedStyle(document.documentElement);
-    colors.fg = cs.getPropertyValue('--fg').trim() || '#fff';
-    colors.subtle = cs.getPropertyValue('--subtle').trim() || '#999';
+  function holeAt(street, idx) {
+    var x = PATHS[street][idx];
+    var side = HOLE_X.indexOf(x);
+    return side < 0 ? null : street * 2 + side;
   }
 
-  function blip(f, d) {
-    if (cfg.sound) {
-      Sound.blip(f, d, 0.3);
-    }
+  // Button presses needed to move the lid from hole a to hole b.
+  function cost(a, b) {
+    return (a >> 1 !== b >> 1 ? 1 : 0) + (a % 2 !== b % 2 ? 1 : 0);
   }
 
-  function layout() {
-    var stage = W.$('stage');
-    var w = stage.clientWidth;
-    var h = stage.clientHeight;
-    var dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cell = Math.min(w / COLS, h / ROWS);
-    offX = (w - cell * COLS) / 2;
-    offY = (h - cell * ROWS) / 2;
-    draw();
-  }
+  GW.run({
+    id: 'manhole',
+    title: 'Manhole',
+    size: [320, 200],
+    hud: { digits: [250, 6], misses: [30, 16] },
 
-  // Placeholder art. Replace the drawing inside with pixel art:
-  // x, y, w, h are the sprite box in pixels, name picks the sprite,
-  // frame picks the animation frame (null when the sprite has one frame).
-  function drawAsset(name, gx, gy, gw, gh, frame) {
-    var x = offX + gx * cell;
-    var y = offY + gy * cell;
-    var w = gw * cell;
-    var h = gh * cell;
-    ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = colors.subtle;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([Math.max(2, cell * 0.14)]);
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    ctx.setLineDash([]);
-    if (cell > 13) {
-      ctx.fillStyle = colors.subtle;
-      ctx.font = Math.max(6, cell * 0.2) + 'px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(frame ? name + ':' + frame : name, x + w / 2, y + h / 2);
-    }
-  }
-
-  function spawn() {
-    var fromLeft = Math.random() < 0.5;
-    var speed = SPEEDS[cfg.speed] + Math.random() * 0.1;
-    walkers.push({
-      x: fromLeft ? -1.2 : COLS + 0.1,
-      vx: fromLeft ? speed : -speed,
-      step: 0
-    });
-  }
-
-  function addMiss() {
-    misses++;
-    blip(110, 0.35);
-    if (misses >= 3) {
-      if (score > best) {
-        best = score;
-        W.store.set(BEST_KEY, best);
-      }
-      setState('over');
-    }
-  }
-
-  function tick() {
-    for (var i = walkers.length - 1; i >= 0; i--) {
-      var wk = walkers[i];
-      wk.x += wk.vx;
-      wk.step++;
-      // Reached the far side: safe.
-      if (wk.x > COLS + 1.1 || wk.x < -1.2) {
-        walkers.splice(i, 1);
-        score++;
-        blip(770, 0.04);
-        updateScores();
-        continue;
-      }
-      // Stepping on an open hole?
-      for (var hi = 0; hi < HOLES.length; hi++) {
-        if (Math.abs(wk.x - HOLES[hi]) < HOLE_W / 2 - 0.3) {
-          if (hi !== lid) {
-            walkers.splice(i, 1);
-            addMiss();
+    segments: function (S) {
+      S.print(function (c) {
+        STREET_Y.forEach(function (y, street) {
+          var edges = [0, HOLE_X[0] - 14, HOLE_X[0] + 14, HOLE_X[1] - 14, HOLE_X[1] + 14, 320];
+          for (var i = 0; i < edges.length; i += 2) {
+            D.rect(c, edges[i], y + 1, edges[i + 1] - edges[i], 4, 1);
           }
-          break;
+          // Doorways at both ends of each walkway.
+          c.lineWidth = 2;
+          c.strokeRect(-2, y - 36, 14, 36);
+          c.strokeRect(308, y - 36, 14, 36);
+        });
+        // Water under the top holes' ledges and along the bottom.
+        HOLE_X.forEach(function (x) {
+          D.rect(c, x - 13, STREET_Y[0] + 39, 26, 3, 1);
+          D.waves(c, x - 20, x + 20, STREET_Y[0] + 46, 1.2, 1.2);
+        });
+        D.waves(c, 0, 320, 197, 2, 1.5);
+      });
+
+      // Walkers at every step. Their cap brim shows which way they walk.
+      PATHS.forEach(function (xs, street) {
+        xs.forEach(function (x, idx) {
+          S.seg(PREFIX[street] + idx, x - 12, STREET_Y[street] - 32, 24, 32, function (c) {
+            D.figure(c, 12, 17, 30, { arms: 'wave', legs: idx % 2 ? 'walk1' : 'walk2', hat: 'cap', flip: street === 1 });
+          });
+        });
+      });
+
+      // The lid holder under each hole, and a walker falling in.
+      [0, 1, 2, 3].forEach(function (h) {
+        var x = HOLE_X[h % 2];
+        var y = STREET_Y[h >> 1];
+        S.seg('man-' + h, x - 16, y - 1, 32, 40, function (c) {
+          D.rect(c, 2, 1, 28, 4, 1.5);
+          D.figure(c, 16, 22, 34, { arms: 'up', legs: 'stand' });
+        });
+        S.seg('fall-' + h, x - 13, y + 8, 26, 30, function (c) {
+          D.figure(c, 13, 13, 26, { arms: 'up', legs: 'spread', rot: Math.PI });
+          D.poly(c, [[2, 30], [6, 22], [10, 28], [13, 20], [16, 28], [20, 22], [24, 30]]);
+        });
+      });
+
+      // Double points indicator.
+      S.seg('double', 72, 7, 18, 18, function (c) {
+        var pts = [];
+        for (var i = 0; i < 10; i++) {
+          var r = i % 2 ? 3.6 : 8.5;
+          var a = -Math.PI / 2 + i * Math.PI / 5;
+          pts.push([9 + Math.cos(a) * r, 9 + Math.sin(a) * r]);
         }
+        D.poly(c, pts);
+      });
+    },
+
+    missIcon: function (c, x, y) {
+      D.figure(c, x, y, 13, { arms: 'up', legs: 'spread', rot: Math.PI });
+    },
+
+    create: function (api) {
+      var lid = 0;
+      var walkers = [];
+      var sinceSpawn = 99;
+      var fell = null;
+      var double = false;
+      var gameB = api.mode === 'b';
+
+      // Future ticks at which a walker reaches a hole: [{ t, hole }].
+      function arrivals(w) {
+        var out = [];
+        for (var i = w.idx + 1; i < XS.length; i++) {
+          var h = holeAt(w.street, i);
+          if (h !== null) {
+            out.push({ t: i - w.idx, hole: h });
+          }
+        }
+        return out;
       }
-    }
-    spawnTimer--;
-    if (spawnTimer <= 0 && walkers.length < 4 && state === 'playing') {
-      spawn();
-      spawnTimer = Math.max(9, 18 - Math.floor(score / 3));
-    }
-  }
 
-  function draw() {
-    var w = canvas.width / (window.devicePixelRatio || 1);
-    var h = canvas.height / (window.devicePixelRatio || 1);
-    ctx.clearRect(0, 0, w, h);
-
-    // Path.
-    drawAsset('path', 0, PATH_Y, COLS, PATH_H, null);
-
-    // Holes: covered by the lid, or open with the tunnel below.
-    HOLES.forEach(function (cx, hi) {
-      if (hi === lid) {
-        drawAsset('lid', cx - HOLE_W / 2, PATH_Y + 0.2, HOLE_W, 1.0, null);
-      } else {
-        drawAsset('hole', cx - HOLE_W / 2, PATH_Y + 0.4, HOLE_W, 1.8, null);
-        drawAsset('tunnel', cx - HOLE_W / 2 - 0.3, PATH_Y + PATH_H, HOLE_W + 0.6, 1.6, null);
+      function fits(cand) {
+        var mine = arrivals(cand);
+        return walkers.every(function (w) {
+          return arrivals(w).every(function (a) {
+            return mine.every(function (b) {
+              return a.hole === b.hole || Math.abs(a.t - b.t) >= cost(a.hole, b.hole);
+            });
+          });
+        });
       }
-    });
 
-    // Walkers. Two-frame walk cycle, frame flips every few ticks.
-    walkers.forEach(function (wk) {
-      var frame = (wk.vx > 0 ? 'walk-r' : 'walk-l') + (((wk.step >> 2) & 1) ? '-b' : '-a');
-      drawAsset('walker', wk.x - W_W / 2, WALK_Y, W_W, W_H, frame);
-    });
-
-    // Misses, top right.
-    for (var m = 0; m < misses; m++) {
-      drawAsset('miss', COLS - 1.2 - m, 0.3, 0.9, 0.9, null);
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  function updateScores() {
-    W.$('score').textContent = 'Score ' + score;
-    W.$('best').textContent = 'Best ' + best;
-  }
-
-  function setState(s) {
-    state = s;
-    var focused = Input.isFocusedView();
-    var big = '';
-    var small = '';
-    if (!focused) {
-      big = '';
-      small = 'Focus to play';
-    } else if (s === 'ready') {
-      big = 'Manhole';
-      small = 'Press A or tap to start';
-    } else if (s === 'paused') {
-      big = 'Paused';
-      small = 'Press A to continue';
-    } else if (s === 'over') {
-      big = 'Score ' + score;
-      small = (score >= best && score > 0 ? 'New best! ' : '') + 'Press A to play again';
-    }
-    W.$('msg-big').textContent = big;
-    W.$('msg-big').style.display = big ? '' : 'none';
-    W.$('msg-small').textContent = small;
-    W.$('overlay').classList.toggle('hidden', s === 'playing');
-    updateScores();
-  }
-
-  function reset() {
-    walkers = [];
-    lid = 1;
-    score = 0;
-    misses = 0;
-    spawnTimer = 16;
-    setState('ready');
-  }
-
-  function loop(t) {
-    if (state === 'playing') {
-      if (!Input.isFocusedView() || document.visibilityState !== 'visible') {
-        setState('paused');
-      } else if (t - lastTick >= 55) {
-        lastTick = t;
-        tick();
-        draw();
+      function maxWalkers() {
+        var s = api.score();
+        return gameB ? Math.min(6, 2 + Math.floor(s / 20)) : Math.min(4, 1 + Math.floor(s / 25));
       }
-    }
-    requestAnimationFrame(loop);
-  }
 
-  Input.on(function (a) {
-    if (!Input.isFocusedView()) {
-      return;
-    }
-    if (a.type === 'a') {
-      if (state === 'over') {
-        reset();
+      function setLid(street, side) {
+        var h = street * 2 + side;
+        if (h === lid) {
+          return false;
+        }
+        lid = h;
+        return true;
       }
-      if (state !== 'playing') {
-        setState('playing');
-        lastTick = performance.now();
-      }
-    } else if (a.type === 'start') {
-      setState(state === 'playing' ? 'paused' : 'playing');
-    } else if (a.type === 'dir') {
-      if (a.dir === 'left') {
-        lid = Math.max(0, lid - 1);
-      } else if (a.dir === 'right') {
-        lid = Math.min(HOLES.length - 1, lid + 1);
-      }
-      if (state === 'ready') {
-        setState('playing');
-        lastTick = performance.now();
-      }
-    }
-  });
 
-  readColors();
-  layout();
-  setState('ready');
-  window.addEventListener('resize', function () {
-    layout();
-    if (state !== 'playing') {
-      setState(state);
+      return {
+        tick: function () {
+          for (var i = 0; i < walkers.length; i++) {
+            var w = walkers[i];
+            w.idx++;
+            if (w.idx >= XS.length) {
+              walkers.splice(i--, 1);
+              continue;
+            }
+            var h = holeAt(w.street, w.idx);
+            if (h === null) {
+              continue;
+            }
+            if (lid === h) {
+              var before = api.addScore(double ? 2 : 1);
+              if (before < 300 && api.score() >= 300) {
+                if (api.misses() === 0) {
+                  double = true;
+                } else {
+                  api.clearMisses();
+                }
+                api.freeze(1500);
+              }
+            } else {
+              fell = h;
+              double = false;
+              walkers.splice(i, 1);
+              api.miss();
+              return;
+            }
+          }
+          sinceSpawn++;
+          if (walkers.length < maxWalkers() && sinceSpawn >= 2 && (walkers.length === 0 || Math.random() < (gameB ? 0.5 : 0.35))) {
+            var street = Math.random() < 0.5 ? 0 : 1;
+            var free = walkers.every(function (o) { return o.street !== street || o.idx > 1; });
+            var cand = { street: street, idx: 0 };
+            if (free && fits(cand)) {
+              walkers.push(cand);
+              sinceSpawn = 0;
+            }
+          }
+        },
+        move: function (dir) {
+          var street = lid >> 1;
+          var side = lid % 2;
+          if (dir === 'up' || dir === 'down') {
+            return setLid(dir === 'up' ? 0 : 1, side);
+          }
+          return setLid(street, dir === 'left' ? 0 : 1);
+        },
+        tap: function (x, y) {
+          return setLid(y < (STREET_Y[0] + STREET_Y[1]) / 2 + 10 ? 0 : 1, x < 160 ? 0 : 1);
+        },
+        auto: function () {
+          var next = null;
+          walkers.forEach(function (w) {
+            var a = arrivals(w)[0];
+            if (a && (!next || a.t < next.t)) {
+              next = a;
+            }
+          });
+          if (next) {
+            lid = next.hole;
+          }
+        },
+        render: function (on, blink) {
+          on('man-' + lid);
+          walkers.forEach(function (w) {
+            on(PREFIX[w.street] + w.idx);
+          });
+          if (fell !== null && blink) {
+            on('fall-' + fell);
+          }
+          if (double) {
+            on('double');
+          }
+        },
+        interval: function (score) {
+          return GW.pace(cfg, score, { slow: 600, normal: 480, fast: 380 });
+        },
+        afterMiss: function () {
+          fell = null;
+        }
+      };
     }
-  });
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(layout);
-  }
-  requestAnimationFrame(loop);
+  }, cfg);
 })();
 </script>
 </body>

@@ -7,7 +7,7 @@ Web widgets and mini games for the iiSU launcher, with a configurator page to se
 | Essentials | Clock (classic, digital, split dial, LCD, Roman, wavy), Calendar (numbers or dots), Weather (classic, bold, card), DS clock and calendar |
 | Device | Battery (level, charging, time left from measured drain, history chart), Devices (battery pills for the handheld and connected controllers), Hourly chime |
 | Decor | Scene (layered landscape that follows the time of day and the handheld's tilt) |
-| Games | Snake, 2048 |
+| Games | Snake, 2048, Fire, Chef, Manhole (Game & Watch rules) |
 
 Themes: light, dark, aurora (the iiSU logo gradient, sky blue `#68ccff` to violet `#c56eff`, with film grain), transparent and custom (a top left and a bottom right color, iiSU blue and violet by default, plus a text color).
 
@@ -37,6 +37,7 @@ To publish: push to GitHub, then go to Settings > Pages and deploy from the `mai
 | `widgets/shared/icons.js` | Lucide icons (ISC license) |
 | `widgets/shared/input.js` | Controller, touch and keyboard input for games (controller only in the focused view) |
 | `widgets/shared/sound.js` | Synthesized chimes and game sounds (Web Audio, no sound files) |
+| `widgets/shared/gw.js` | Game & Watch engine: LCD segments, score digits, misses, clock mode, skins |
 | `fonts/` | Font files |
 | `tools/widget-probe.html` | Test widget that reports what the iiSU web view allows |
 
@@ -68,6 +69,40 @@ On download, stylesheets marked `data-inline` get their `url(...)` files (fonts,
 `external.html` catalogs pages other people made that already live online (for example the [DVD screensaver](https://github.com/bemxio/dvd-screensaver) by bemxio). They are listed in `assets/external.js`: address, options passed in the page's own query string, and credits. Their cards use `widgets/embed.html`, which lays the page out at a fixed width (`viewport`, 1024 px by default) and scales it down to the widget, so a page made for a full screen fits a 198 px tile. A download is a small file that loads the page, so it needs an internet connection.
 
 Any card can show a **Credits** bubble: add `credits: [{ name, by, url, byUrl, license, note }]` to its entry in `assets/app.js` or `assets/external.js`.
+
+## Game & Watch games
+
+`fire.html`, `chef.html` and `manhole.html` follow the rules of the 1980 and 1981 Game & Watch games. The graphics are new drawings, the originals are not included.
+
+- The screen is a fixed set of segments that are either on or off. Unlit segments stay faintly visible, like on the LCD. Everything moves in steps, one step per tick, and the tick gets shorter as the score grows.
+- The tile shows the clock and the game playing itself, like the originals when nobody plays. Focus the widget and press A (or tap) to play.
+- Fire: three net positions, jumpers bounce three times into the ambulance, 1 point per bounce, misses cleared at 200 and 500. Game B: jumpers from two floors.
+- Chef: 1 point per flip, the cat's fork holds the leftmost food for a moment, the mouse eats what falls, misses cleared at 200 and 500. Game A: 3 foods, Game B: 4.
+- Manhole: four holes, up, down, left and right (or a tap) move the lid, 1 point per crossing. At 300 points: double points until the next miss if there are no misses, otherwise the misses are cleared. Game B: more walkers.
+- New jumpers, flights and walkers are only let in when the player can reach every landing in time.
+
+**Skins.** Each game has a `skin` setting: the address of a JSON file with a sprite sheet.
+
+```json
+{
+  "image": "fire-sheet.png",
+  "background": "fire-screen.png",
+  "ghosts": false,
+  "segments": { "men-0": [0, 0, 68, 46], "net-0": [68, 0, 22, 22] }
+}
+```
+
+`segments` maps a segment id to its rectangle in `image` (x, y, width, height). It is drawn in the segment's box on the 320×200 screen; segments left out keep the built-in drawing. `background` replaces the LCD panel and `ghosts: false` hides the unlit segments. Open a game with `?outline=true` to see every segment's box and id. Image addresses are relative to the JSON file; use data URIs for a skin that works offline.
+
+A skin can also bring its own screen layout, for sprites drawn for a different screen:
+
+- `"size": [160, 144]`: the skin's screen size (usually the background's size).
+- A segment as `[sx, sy, sw, sh, dx, dy]`: cut from the sheet and drawn unscaled at (dx, dy) on the skin's screen. With a `size`, built-in segments the skin leaves out are not drawn.
+- `"hud": { "digits": [x, y], "scale": 0.5, "misses": [x, y], "missStep": 12, "label": [x, y], "missLabel": [x, y] }`: where the score, misses and GAME A/B label go.
+- `"@miss"`, `"@miss-label"`, `"@game-a"`, `"@game-b"` in `segments`: sprites for the miss icon, the MISS word and the game label.
+- `"pixelated": true` keeps pixel art sharp when it is scaled up.
+
+Fire uses the Game & Watch Gallery sprites by default (`skin: 'gallery'`, credits: Nintendo, ripped by Mario Gamer, shaded and recolored by Grynz). They live in `skins/fire-gallery/`: `sheet.png`, `background.png` and `skin.json` are the sources, and `skin.js` is the same skin with the images embedded, loaded with `data-inline` so downloads work offline. After changing the sources, rebuild `skin.js` (it sets `GW.skins.gallery`). `skin: 'none'` goes back to the redrawn LCD, and any other value is read as the address of a skin JSON file.
 
 ## Fonts
 

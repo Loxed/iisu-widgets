@@ -87,7 +87,7 @@ var Input = (function () {
     }
   });
 
-  // A swipe gives a direction, a short tap counts as A.
+  // A swipe gives a direction, a short tap counts as A (with the tap position in x and y).
   var touchStart = null;
   document.addEventListener('pointerdown', function (e) {
     touchStart = { x: e.clientX, y: e.clientY };
@@ -101,7 +101,7 @@ var Input = (function () {
     touchStart = null;
     var min = Math.max(24, Math.min(window.innerWidth, window.innerHeight) * 0.08);
     if (Math.abs(dx) < min && Math.abs(dy) < min) {
-      emit({ type: 'a' });
+      emit({ type: 'a', x: e.clientX, y: e.clientY });
     } else if (Math.abs(dx) > Math.abs(dy)) {
       emit({ type: 'dir', dir: dx > 0 ? 'right' : 'left' });
     } else {

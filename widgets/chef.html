@@ -7,20 +7,11 @@
 <link rel="stylesheet" href="shared/base.css" data-inline>
 <style>
   #root {
-    gap: 4cqmin;
+    gap: 3cqmin;
   }
 
   :root.tilt #root > * {
     --depth: 0;
-  }
-
-  #scores {
-    display: flex;
-    gap: 5cqmin;
-  }
-
-  #score {
-    display: none;
   }
 
   #stage {
@@ -40,22 +31,10 @@
     position: absolute;
     inset: 0;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2cqmin;
     text-align: center;
     pointer-events: none;
-  }
-
-  #overlay .big {
-    font-size: 11cqmin;
-    font-weight: 600;
-  }
-
-  #overlay .small {
-    font-size: 5.5cqmin;
-    color: var(--muted);
   }
 
   #overlay.hidden {
@@ -66,21 +45,42 @@
     padding: 3cqmin 6cqmin;
     border-radius: 4cqmin;
     background: var(--bg);
-    box-shadow: 0 1cqmin 4cqmin rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1cqmin 4cqmin rgba(0, 0, 0, 0.25);
   }
 
   :root[data-theme="transparent"] #overlay .box {
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  #overlay .big {
+    font-size: 9cqmin;
+    font-weight: 600;
+  }
+
+  #overlay .small {
+    font-size: 4.5cqmin;
+    color: var(--muted);
   }
 
   @container (min-aspect-ratio: 3/2) {
     #root {
-      padding: 5cqmin 8cqmin;
+      padding: 4cqmin 7cqmin;
     }
+  }
 
-    #score {
-      display: inline;
-    }
+  /* Tile: the game screen is the whole widget, no title, hint or theme background. */
+  :root.gw-tile header {
+    display: none;
+  }
+
+  :root.gw-tile #root {
+    padding: 0;
+    background: transparent;
+  }
+
+  :root.gw-tile #root::before,
+  :root.gw-tile #root::after {
+    display: none;
   }
 </style>
 </head>
@@ -88,11 +88,11 @@
 <div id="root">
   <header class="row">
     <span class="title">Chef</span>
-    <span id="scores" class="label"><span id="score">Score 0</span><span id="best">Best 0</span></span>
+    <span id="best" class="label"></span>
   </header>
   <div id="stage">
     <canvas id="board"></canvas>
-    <div id="overlay"><div class="box"><div class="big" id="msg-big"></div><div class="small" id="msg-small"></div></div></div>
+    <div id="overlay" class="hidden"><div class="box"><div class="big" id="msg-big"></div><div class="small" id="msg-small"></div></div></div>
   </div>
 </div>
 
@@ -102,293 +102,326 @@
 <script src="shared/runtime.js" data-inline></script>
 <script src="shared/input.js" data-inline></script>
 <script src="shared/sound.js" data-inline></script>
+<script src="shared/gw.js" data-inline></script>
 <script>
+// Chef (Game & Watch, 1981). Rules of the original:
+// - The chef moves left and right under the food and flips it back up with his pan.
+// - 1 point each time a piece of food lands in the pan.
+// - Food that reaches the floor is eaten by a mouse: a miss. Three misses end the game.
+// - The cat on the left sometimes spears the leftmost food with a fork and holds it for a moment,
+//   which changes when it comes down.
+// - At 200 and 500 points the misses are cleared. The game gets faster as the score grows.
+// - Game A: three pieces of food. Game B: four.
 (function () {
-  // Game & Watch Chef: food flies over from the left in an arc. You move your
-  // plate stack up and down so the top plate catches it at the right height.
-  // Every catch eats one plate; an empty stack resets to four (dish served).
-  // Three misses = over.
-  //
-  // --- ASSET SHEET ---------------------------------------------------------
-  // All sizes are in grid cells. The grid is 20 x 10.
-  // Every sprite is currently a dashed placeholder box drawn by drawAsset().
-  // To add pixel art: draw inside the box passed to drawAsset, using name and
-  // frame to pick the sprite.
-  //
-  //   name     size         frames / notes
-  //   chef     2.6 x 2.4    the chef on the left who throws the food
-  //   plate    1.8 x 0.7    one plate of the stack, drawn bottom to top
-  //   hand     1.8 x 0.7    the plate currently at the top of the stack
-  //   food     1.0 x 0.8    frames: 'sausage', 'fish', 'carrot', 'shrimp'
-  //   counter  1.4 x 4.2    the counter the plates stand on, right side
-  //   miss     0.9 x 0.9    one shown per miss (max 3), top right
-  // -------------------------------------------------------------------------
-
   var cfg = W.config({
-    speed: 'normal',   // slow, normal or fast
-    sound: true
+    mode: 'a',          // a or b
+    speed: 'normal',    // slow, normal or fast
+    look: 'lcd',        // lcd (grey green LCD) or theme (the widget theme's colors)
+    sound: true,
+    skin: '',           // address of a skin JSON file (see shared/gw.js)
+    outline: false      // show every segment's box and id, to make a skin
   });
 
-  var TICKS = { slow: 72, normal: 56, fast: 42 };
-  var COLS = 20, ROWS = 10;
-  var PLATE_X = 16.2;      // where food is caught
-  var STACK_X = 16.2;
-  var BASE_Y = 8.0;        // bottom plate
-  var PLATE_STEP = 1.5;    // height between stack levels
-  var THROW_X = 0.8, THROW_Y = 6.4;
-  var FOOD_VX = 0.8;
-  var G = 0.16;
-  var FOOD_W = 1.0, FOOD_H = 0.8;
-  var FOOD_TYPES = ['sausage', 'fish', 'carrot', 'shrimp'];
+  var D = GW.draw;
+  var gameB = cfg.mode === 'b';
+  var COLS = gameB ? [112, 162, 212, 262] : [124, 184, 244];
+  var LEVELS = 6;                 // 0 (just above the pan) to 5 (top)
+  var FORK_LEVEL = 3;
 
-  var BEST_KEY = 'chef:best';
-  var canvas = W.$('board');
-  var ctx = canvas.getContext('2d');
-
-  var cell = 10, offX = 0, offY = 0;
-  var foods = [];
-  var stack = 4;
-  var spawnTimer = 20;
-  var score = 0;
-  var misses = 0;
-  var best = W.store.get(BEST_KEY) || 0;
-  var state = 'ready';   // ready, playing, paused, over
-  var lastTick = 0;
-  var colors = {};
-
-  function readColors() {
-    var cs = getComputedStyle(document.documentElement);
-    colors.fg = cs.getPropertyValue('--fg').trim() || '#fff';
-    colors.subtle = cs.getPropertyValue('--subtle').trim() || '#999';
+  function levelY(l) {
+    return 144 - l * 21;
   }
 
-  function blip(f, d) {
-    if (cfg.sound) {
-      Sound.blip(f, d, 0.3);
+  // The four foods: sausage, fish, drumstick, steak. Drawn around (0, 0).
+  var FOODS = [
+    function (c) {
+      D.rect(c, -11, -4, 22, 8, 4);
+      D.line(c, -12, 0, -14, 2, 1.5);
+      D.line(c, 12, 0, 14, -2, 1.5);
+    },
+    function (c) {
+      c.beginPath();
+      c.ellipse(-2, 0, 9, 5, 0, 0, Math.PI * 2);
+      c.fill();
+      D.poly(c, [[6, 0], [13, -6], [13, 6]]);
+    },
+    function (c) {
+      c.beginPath();
+      c.ellipse(-4, 0, 8, 6, 0, 0, Math.PI * 2);
+      c.fill();
+      D.line(c, 3, 0, 10, 0, 3);
+      D.circle(c, 11, -2, 2.2);
+      D.circle(c, 11, 2, 2.2);
+    },
+    function (c) {
+      D.poly(c, [[-11, -3], [-5, -7], [6, -6], [11, -1], [8, 6], [-4, 7], [-10, 4]]);
     }
-  }
+  ];
 
-  function layout() {
-    var stage = W.$('stage');
-    var w = stage.clientWidth;
-    var h = stage.clientHeight;
-    var dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cell = Math.min(w / COLS, h / ROWS);
-    offX = (w - cell * COLS) / 2;
-    offY = (h - cell * ROWS) / 2;
-    draw();
-  }
+  GW.run({
+    id: 'chef',
+    title: 'Chef',
+    size: [320, 200],
+    hud: { digits: [250, 6], misses: [84, 16] },
 
-  // Placeholder art. Replace the drawing inside with pixel art:
-  // x, y, w, h are the sprite box in pixels, name picks the sprite,
-  // frame picks the animation frame (null when the sprite has one frame).
-  function drawAsset(name, gx, gy, gw, gh, frame) {
-    var x = offX + gx * cell;
-    var y = offY + gy * cell;
-    var w = gw * cell;
-    var h = gh * cell;
-    ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = colors.subtle;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([Math.max(2, cell * 0.14)]);
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    ctx.setLineDash([]);
-    if (cell > 13) {
-      ctx.fillStyle = colors.subtle;
-      ctx.font = Math.max(6, cell * 0.2) + 'px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(frame ? name + ':' + frame : name, x + w / 2, y + h / 2);
-    }
-  }
+    segments: function (S) {
+      S.print(function (c) {
+        // Floor, the cat's shelf and a stove on the right.
+        D.line(c, 0, 193, 320, 193, 2);
+        D.rect(c, 4, 108, 56, 5, 1);
+        D.line(c, 12, 113, 12, 130, 2);
+        D.line(c, 52, 113, 52, 130, 2);
+        c.lineWidth = 2;
+        c.strokeRect(290, 150, 28, 43);
+        D.rect(c, 288, 144, 32, 6, 1);
+        D.circle(c, 297, 162, 2);
+        D.circle(c, 310, 162, 2);
+      });
 
-  function stackTopY() {
-    return BASE_Y - (stack - 1) * PLATE_STEP;
-  }
+      S.seg('cat', 6, 58, 52, 50, function (c) {
+        c.beginPath();
+        c.ellipse(24, 38, 17, 12, 0, 0, Math.PI * 2);
+        c.fill();
+        D.circle(c, 36, 20, 10);
+        D.poly(c, [[28, 14], [30, 3], [36, 11]]);
+        D.poly(c, [[37, 11], [43, 3], [45, 14]]);
+        c.lineWidth = 4;
+        c.beginPath();
+        c.moveTo(8, 42);
+        c.quadraticCurveTo(-2, 30, 6, 16);
+        c.stroke();
+      });
 
-  // Launch food aimed so it crosses the catch line at height level (1 to 4).
-  function spawn() {
-    var level = 1 + Math.floor(Math.random() * 4);
-    var targetY = BASE_Y - (level - 1) * PLATE_STEP;
-    var T = (PLATE_X - THROW_X) / FOOD_VX;
-    var vy = (targetY - THROW_Y) / T - G * T / 2;
-    foods.push({
-      x: THROW_X,
-      y: THROW_Y,
-      vx: FOOD_VX,
-      vy: vy,
-      type: FOOD_TYPES[Math.floor(Math.random() * FOOD_TYPES.length)]
-    });
-  }
+      var col0 = COLS[0];
+      var forkY = levelY(FORK_LEVEL);
+      S.seg('fork', 44, forkY - 8, col0 - 58, 16, function (c, w) {
+        D.line(c, 0, 8, w - 6, 8, 3);
+        D.line(c, w - 8, 3, w - 8, 13, 2);
+        D.line(c, w - 8, 3, w, 3, 2);
+        D.line(c, w - 8, 8, w, 8, 2);
+        D.line(c, w - 8, 13, w, 13, 2);
+      });
 
-  function addMiss() {
-    misses++;
-    blip(110, 0.35);
-    if (misses >= 3) {
-      if (score > best) {
-        best = score;
-        W.store.set(BEST_KEY, best);
-      }
-      setState('over');
-    }
-  }
-
-  function tick() {
-    for (var i = foods.length - 1; i >= 0; i--) {
-      var f = foods[i];
-      f.x += f.vx;
-      f.vy += G;
-      f.y += f.vy;
-      if (f.x >= PLATE_X && f.x <= PLATE_X + FOOD_VX + 0.6) {
-        if (Math.abs(f.y - stackTopY()) <= 1.1) {
-          // Caught on the top plate.
-          foods.splice(i, 1);
-          score++;
-          blip(880, 0.05);
-          stack--;
-          if (stack <= 0) {
-            stack = 4;
-            blip(1320, 0.09);
-          }
-          updateScores();
-          continue;
+      COLS.forEach(function (x, col) {
+        var draw = FOODS[col % FOODS.length];
+        for (var l = 0; l < LEVELS; l++) {
+          (function (rot) {
+            S.seg('f-' + col + '-' + l, x - 14, levelY(l) - 10, 28, 20, function (c) {
+              c.translate(14, 10);
+              c.rotate(rot);
+              draw(c);
+            });
+          })(l * 0.7 + col * 0.9);
         }
+        S.seg('floor-' + col, x - 14, 180, 28, 12, function (c) {
+          c.translate(14, 7);
+          draw(c);
+        });
+        S.seg('mouse-' + col, x + 8, 178, 26, 15, function (c) {
+          c.beginPath();
+          c.ellipse(14, 10, 9, 5, 0, 0, Math.PI * 2);
+          c.fill();
+          D.circle(c, 5, 7, 3.5);
+          D.circle(c, 5, 3, 2.5);
+          D.line(c, 22, 11, 26, 6, 1.5);
+        });
+        S.seg('chef-' + col, x - 44, 124, 36, 70, function (c) {
+          D.figure(c, 18, 46, 46, { arms: 'forward', legs: 'stand', hat: 'chef' });
+        });
+        S.seg('pan-' + col, x - 16, 150, 32, 14, function (c) {
+          D.line(c, 0, 9, 7, 8, 2.5);
+          c.beginPath();
+          c.ellipse(18, 8, 12, 3.5, 0, 0, Math.PI * 2);
+          c.fill();
+        });
+        S.seg('toss-' + col, x - 16, 144, 32, 20, function (c) {
+          D.line(c, 0, 15, 7, 13, 2.5);
+          c.save();
+          c.translate(18, 9);
+          c.rotate(-0.45);
+          c.beginPath();
+          c.ellipse(0, 0, 12, 3.5, 0, 0, Math.PI * 2);
+          c.fill();
+          c.restore();
+        });
+      });
+    },
+
+    missIcon: function (c, x, y) {
+      c.beginPath();
+      c.ellipse(x + 1, y + 2, 5, 3, 0, 0, Math.PI * 2);
+      c.fill();
+      D.circle(c, x - 4, y, 2.5);
+      D.circle(c, x - 4, y - 3, 1.8);
+    },
+
+    create: function (api) {
+      var chef = 1;
+      var tossed = -1;
+      var dropped = null;
+      var catWait = 8;
+      var order = COLS.map(function (x, i) { return i; }).sort(function () { return Math.random() - 0.5; });
+      var foods = order.map(function (col, i) {
+        return { col: col, level: 6 + i * 4, dir: -1, apex: 5, hang: 0, hangTop: 1, held: 0 };
+      });
+
+      // Ticks until a food next reaches the pan.
+      function landing(f) {
+        if (f.dir > 0) {
+          return (f.apex - f.level) + f.hangTop + f.apex;
+        }
+        return f.held + f.hang + f.level;
       }
-      if (f.x > COLS + 0.5) {
-        foods.splice(i, 1);
-        addMiss();
+
+      // Smallest margin between a landing at time t in column col and the other foods' landings.
+      // A margin below 0 means the chef cannot get to both in time.
+      function margin(f, t) {
+        var worst = 99;
+        foods.forEach(function (o) {
+          if (o !== f) {
+            worst = Math.min(worst, Math.abs(landing(o) - t) - Math.abs(o.col - f.col));
+          }
+        });
+        return worst;
       }
-    }
-    spawnTimer--;
-    if (spawnTimer <= 0 && foods.length < 3 && state === 'playing') {
-      spawn();
-      spawnTimer = Math.max(12, 26 - score);
-    }
-  }
 
-  function draw() {
-    var w = canvas.width / (window.devicePixelRatio || 1);
-    var h = canvas.height / (window.devicePixelRatio || 1);
-    ctx.clearRect(0, 0, w, h);
-
-    // Scene.
-    drawAsset('chef', 0, 4.4, 2.6, 2.4, null);
-    drawAsset('counter', STACK_X - 0.4, 4.4, 1.4, 4.2, null);
-
-    // The plate stack. Bottom to top; the top plate is the catch plate.
-    for (var p = 0; p < stack; p++) {
-      var py = BASE_Y - p * PLATE_STEP;
-      var isTop = p === stack - 1;
-      drawAsset(isTop ? 'hand' : 'plate', STACK_X, py, 1.8, 0.7, null);
-    }
-
-    // Food in the air.
-    foods.forEach(function (f) {
-      drawAsset('food', f.x, f.y, FOOD_W, FOOD_H, f.type);
-    });
-
-    // Misses, top right.
-    for (var m = 0; m < misses; m++) {
-      drawAsset('miss', COLS - 1.2 - m, 0.3, 0.9, 0.9, null);
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  function updateScores() {
-    W.$('score').textContent = 'Score ' + score;
-    W.$('best').textContent = 'Best ' + best;
-  }
-
-  function setState(s) {
-    state = s;
-    var focused = Input.isFocusedView();
-    var big = '';
-    var small = '';
-    if (!focused) {
-      big = '';
-      small = 'Focus to play';
-    } else if (s === 'ready') {
-      big = 'Chef';
-      small = 'Press A or tap to start';
-    } else if (s === 'paused') {
-      big = 'Paused';
-      small = 'Press A to continue';
-    } else if (s === 'over') {
-      big = 'Score ' + score;
-      small = (score >= best && score > 0 ? 'New best! ' : '') + 'Press A to play again';
-    }
-    W.$('msg-big').textContent = big;
-    W.$('msg-big').style.display = big ? '' : 'none';
-    W.$('msg-small').textContent = small;
-    W.$('overlay').classList.toggle('hidden', s === 'playing');
-    updateScores();
-  }
-
-  function reset() {
-    foods = [];
-    stack = 4;
-    score = 0;
-    misses = 0;
-    spawnTimer = 20;
-    setState('ready');
-  }
-
-  function loop(t) {
-    if (state === 'playing') {
-      if (!Input.isFocusedView() || document.visibilityState !== 'visible') {
-        setState('paused');
-      } else if (t - lastTick >= TICKS[cfg.speed]) {
-        lastTick = t;
-        tick();
-        draw();
+      // After a flip the food rises to a height from 3 to 5 and hangs there for 1 to 3 ticks.
+      // Picks a flight whose landing leaves the chef time to reach every other landing.
+      function pickFlight(f) {
+        var tries = [];
+        for (var a = 3; a <= 5; a++) {
+          for (var hang = 1; hang <= 3; hang++) {
+            tries.push({ a: a, hang: hang, m: margin(f, 2 * a + hang) });
+          }
+        }
+        var ok = tries.filter(function (t) { return t.m >= 0; });
+        if (ok.length) {
+          return ok[Math.floor(Math.random() * ok.length)];
+        }
+        tries.sort(function (p, q) { return q.m - p.m; });
+        return tries[0];
       }
-    }
-    requestAnimationFrame(loop);
-  }
 
-  Input.on(function (a) {
-    if (!Input.isFocusedView()) {
-      return;
+      return {
+        tick: function () {
+          tossed = -1;
+          var tossedFood = null;
+          for (var i = 0; i < foods.length; i++) {
+            var f = foods[i];
+            if (f.held > 0) {
+              f.held--;
+              continue;
+            }
+            if (f.hang > 0) {
+              f.hang--;
+              continue;
+            }
+            if (f.dir > 0) {
+              f.level++;
+              if (f.level >= f.apex) {
+                f.dir = -1;
+                f.hang = f.hangTop;
+              }
+              continue;
+            }
+            f.level--;
+            if (f.level === 0) {
+              if (chef === f.col) {
+                tossed = f.col;
+                f.dir = 1;
+                tossedFood = f;
+                var before = api.addScore(1);
+                if (before < 200 && api.score() >= 200 || before < 500 && api.score() >= 500) {
+                  api.clearMisses();
+                  api.freeze(1500);
+                }
+              } else {
+                dropped = f;
+                api.miss();
+                return;
+              }
+            }
+          }
+          // The flight is chosen once every food has moved, so all landing times count from now.
+          if (tossedFood) {
+            var flight = pickFlight(tossedFood);
+            tossedFood.apex = flight.a;
+            tossedFood.hangTop = flight.hang;
+          }
+          // The cat spears the leftmost food on its way down, if that still leaves a fair game.
+          catWait--;
+          var f0 = foods.filter(function (f) { return f.col === 0; })[0];
+          if (f0 && catWait <= 0 && f0.dir < 0 && f0.level === FORK_LEVEL && !f0.held && !f0.hang && Math.random() < 0.4) {
+            var hold = 2 + Math.floor(Math.random() * 3);
+            if (margin(f0, hold + f0.level) >= 0) {
+              f0.held = hold;
+              catWait = 14;
+            }
+          }
+        },
+        move: function (dir) {
+          if (dir === 'left' && chef > 0) {
+            chef--;
+            return true;
+          }
+          if (dir === 'right' && chef < COLS.length - 1) {
+            chef++;
+            return true;
+          }
+          return false;
+        },
+        tap: function (x) {
+          return this.move(x < COLS[chef] - 10 ? 'left' : 'right');
+        },
+        auto: function () {
+          var next = null;
+          foods.forEach(function (f) {
+            if (!next || landing(f) < landing(next)) {
+              next = f;
+            }
+          });
+          if (next) {
+            chef = next.col;
+          }
+        },
+        render: function (on, blink) {
+          on('cat');
+          on('chef-' + chef);
+          on((tossed === chef ? 'toss-' : 'pan-') + chef);
+          foods.forEach(function (f) {
+            if (f === dropped) {
+              on('floor-' + f.col);
+              if (blink) {
+                on('mouse-' + f.col);
+              }
+            } else if (f.level >= 0 && f.level < LEVELS) {
+              on('f-' + f.col + '-' + f.level);
+              if (f.held) {
+                on('fork');
+              }
+            }
+          });
+        },
+        interval: function (score) {
+          return GW.pace(cfg, score, { slow: 520, normal: 420, fast: 330 });
+        },
+        afterMiss: function () {
+          // The lost food falls back in from the top when it fits.
+          var f = dropped;
+          dropped = null;
+          f.dir = -1;
+          f.hang = 0;
+          f.held = 0;
+          for (var l = 7; l < 16; l++) {
+            f.level = l;
+            if (margin(f, l) >= 0) {
+              break;
+            }
+          }
+        }
+      };
     }
-    if (a.type === 'a') {
-      if (state === 'over') {
-        reset();
-      }
-      if (state !== 'playing') {
-        setState('playing');
-        lastTick = performance.now();
-      }
-    } else if (a.type === 'start') {
-      setState(state === 'playing' ? 'paused' : 'playing');
-    } else if (a.type === 'dir') {
-      if (a.dir === 'up') {
-        stack = Math.min(4, stack + 1);
-      } else if (a.dir === 'down') {
-        stack = Math.max(1, stack - 1);
-      }
-      if (state === 'ready') {
-        setState('playing');
-        lastTick = performance.now();
-      }
-    }
-  });
-
-  readColors();
-  layout();
-  setState('ready');
-  window.addEventListener('resize', function () {
-    layout();
-    if (state !== 'playing') {
-      setState(state);
-    }
-  });
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(layout);
-  }
-  requestAnimationFrame(loop);
+  }, cfg);
 })();
 </script>
 </body>
