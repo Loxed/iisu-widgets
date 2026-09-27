@@ -273,7 +273,7 @@
 // closed): feed it, play with it, chat with it, put it to bed. Its mood shows on its face and in what it
 // does on its own. It goes to bed by itself when it is exhausted or late at night.
 // Focused view: left and right choose Feed, Play, Chat or Sleep, A does it; tap the Mii to pet it.
-// Drag, pinch or the right stick and triggers move the camera; it comes back by itself.
+// Drag, pinch or the right stick and L1 / R1 move the camera; it comes back by itself.
 // Without an ID it shows the default Mii.
 (function () {
   var cfg = W.config({
@@ -1289,7 +1289,7 @@
 
   // ---------- Camera ----------
   // The usual framing faces the Mii. In the focused view, dragging (a finger or the mouse) or the right
-  // stick turns the camera around the Mii and up or down; pinching, the mouse wheel or the triggers
+  // stick turns the camera around the Mii and up or down; pinching, the mouse wheel or L1 / R1
   // zoom. The camera then follows the Mii. After a few seconds without touching it, it glides back to
   // the usual framing (right away when the widget goes back to a tile).
   var base = { dist: 540, camY: 110, lookY: 94 };
@@ -1327,8 +1327,8 @@
       };
       var rx = dz(p.axes[2]);
       var ry = dz(p.axes[3]);
-      var zin = p.buttons[7] ? p.buttons[7].value || (p.buttons[7].pressed ? 1 : 0) : 0;
-      var zout = p.buttons[6] ? p.buttons[6].value || (p.buttons[6].pressed ? 1 : 0) : 0;
+      var zin = p.buttons[5] ? p.buttons[5].value || (p.buttons[5].pressed ? 1 : 0) : 0;
+      var zout = p.buttons[4] ? p.buttons[4].value || (p.buttons[4].pressed ? 1 : 0) : 0;
       if (rx || ry || zin > 0.1 || zout > 0.1) {
         moveCam(-rx * dt * 2.4, -ry * dt * 1.6, Math.exp((zout - zin) * dt * 1.2));
       }
