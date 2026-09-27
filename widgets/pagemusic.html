@@ -150,7 +150,8 @@
     fadeIn: 2,            // seconds to fade in when the page shows up
     loop: 'blend',        // blend (overlap the end and the start, for tracks that fade out) or exact
     loopBlend: 8,         // seconds of overlap in blend mode
-    showName: true,       // show the track name for a few seconds when it starts
+    text: 'none',         // text on the picture: none, name (the track name for a few seconds when it
+                          // starts) or all (also loading and errors)
     preview: false        // set by the configurator's preview
   });
 
@@ -298,7 +299,8 @@
       stay = false;
     }
     W.$('status').textContent = text;
-    var show = !!text && (stay || cfg.showName);
+    // With text: none nothing shows: the picture stays clean, the music just fades in once loaded.
+    var show = !!text && (cfg.text === 'all' || (cfg.text === 'name' && !stay));
     W.$('chip').classList.toggle('hidden', !show);
     clearTimeout(chipTimer);
     if (show && !stay) {

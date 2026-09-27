@@ -162,7 +162,7 @@
         { key: 'volume', label: 'Volume', type: 'seg', def: 0.7, choices: [[0.4, 'Low'], [0.7, 'Medium'], [1, 'High']] },
         { key: 'fadeIn', label: 'Fade in', type: 'seg', def: 2, choices: [[0.5, 'Quick'], [2, 'Medium'], [5, 'Slow']] },
         { key: 'loop', label: 'Loop', type: 'seg', def: 'blend', choices: [['blend', 'Crossfade'], ['exact', 'Exact']] },
-        { key: 'showName', label: 'Show the track name', type: 'switch', def: true }
+        { key: 'text', label: 'Text on the picture', type: 'seg', def: 'none', choices: [['none', 'None'], ['name', 'Track name'], ['all', 'Name and loading']] }
       ]
     },
     {
