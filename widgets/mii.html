@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mii Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+  #root {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  #stage {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* Size and position are set by the script: it measures where the Mii actually is in the picture
+     (every Mii is a different height) and fits that part to the widget, centered. */
+  #mii, #spin {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    transition: opacity 200ms ease;
+  }
+
+  #spin {
+    display: none;
+  }
+
+  :root.view-spin #spin {
+    display: block;
+  }
+
+  :root.view-spin #mii {
+    display: none;
+  }
+
+  #mii.loading {
+    opacity: 0;
+  }
+
+  /* Lively and chatty: a slow breath, and a little hop when the pose changes. */
+  #stage.alive {
+    animation: breathe 3.6s ease-in-out infinite;
+  }
+
+  #stage.hop {
+    animation: hop 420ms ease-out;
+  }
+
+  @keyframes breathe {
+    0%, 100% {
+      transform: translateY(0) scale(1);
+    }
+
+    50% {
+      transform: translateY(-0.8%) scale(1.012);
+    }
+  }
+
+  @keyframes hop {
+    0% {
+      transform: translateY(0) scale(1, 1);
+    }
+
+    30% {
+      transform: translateY(-4%) scale(0.98, 1.03);
+    }
+
+    60% {
+      transform: translateY(0) scale(1.02, 0.97);
+    }
+
+    100% {
+      transform: translateY(0) scale(1, 1);
+    }
+  }
+
+  #name {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 5cqmin;
+    text-align: center;
+    font-size: 7cqmin;
+    font-weight: 600;
+  }
+
+  #msg {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2cqmin;
+    padding: 8cqmin;
+    text-align: center;
+    font-size: 5.5cqmin;
+    color: var(--muted);
+  }
+
+  #hint {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 4cqmin;
+    text-align: center;
+    font-size: 3.6cqmin;
+    color: var(--muted);
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    #name {
+      font-size: 5.5cqmin;
+      bottom: 4cqmin;
+    }
+
+    #hint {
+      display: block;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="stage">
+    <img id="mii" alt="" class="loading">
+    <canvas id="spin"></canvas>
+  </div>
+  <div id="name"></div>
+  <div id="hint"></div>
+  <div id="msg"></div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script src="shared/input.js" data-inline></script>
+<script>
+// Mii: shows the Mii of a Nintendo Network ID (or Pretendo Network ID).
+// The Mii is looked up and drawn by ariankordi's Mii renderer (mii-unsecure.ariankordi.net), which keeps
+// an archive of Nintendo Network IDs. The lookup and the pictures are kept on the handheld, so once
+// seen, the Mii also shows offline.
+// Focused view: left and right change the view, up and down (or a tap) the expression.
+(function () {
+  var cfg = W.config({
+    nnid: '',             // Nintendo Network ID (or Pretendo Network ID)
+    network: 'nnid',      // nnid (Nintendo Network archive) or pnid (Pretendo)
+    view: 'body',         // face, body, left, right or spin
+    expression: 'smile',
+    clothes: 'default',   // shirt color: default, red, orange, yellow, yellowgreen, green, blue, skyblue, pink, purple, brown, white, black
+    pants: 'default',     // trousers color: default, gray, red, blue, gold
+    body: 'default',      // body model: default, wiiu, 3ds, switch, miitomo
+    lighting: 'wiiu',     // shading: wiiu, wiiu_blinn, switch, miitomo (Mii Studio look), light_disable (flat)
+    blink: true,          // blink now and then
+    animation: 'lively',  // still, lively (changes expression and turns now and then) or chatty (talks now and then)
+    showName: true
+  });
+
+  var API = 'https://mii-unsecure.ariankordi.net';
+  var CACHE = 'iisu-widgets-mii';
+  var VIEWS = [['face', 'Portrait'], ['body', 'Whole body'], ['left', 'Turned left'], ['right', 'Turned right'], ['spin', 'Spinning']];
+  var EXPRESSIONS = [['normal', 'Normal'], ['smile', 'Smile'], ['smile_open_mouth', 'Big smile'], ['wink_left', 'Wink'], ['like_wink_left', 'Cheeky wink'],
+    ['surprise', 'Surprised'], ['surprise_open_mouth', 'Shocked'], ['anger', 'Angry'], ['sorrow', 'Sad'], ['frustrated', 'Frustrated'], ['blink', 'Eyes closed']];
+  var SPIN_FRAMES = 16;
+
+  var mii = null;         // { data, name }
+  // What the focused view shows; the tile always shows the configured view and expression.
+  var view = cfg.view;
+  var expr = cfg.expression;
+  var tilt = { y: 0, z: 0 }; // extra turn and head tilt, changed by the animation
+  var blinkTimer = null;
+  var animTimer = null;
+  var manualUntil = 0;      // the animation waits after the player changes the view or expression
+  var spinTimer = null;
+  var urls = {};          // image address -> blob: address from the cache
+
+  function indexOf(list, key) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i][0] === key) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  function message(text) {
+    W.$('msg').textContent = text;
+    W.$('msg').style.display = text ? '' : 'none';
+  }
+
+  // ---------- Renderer addresses ----------
+  function imageUrl(v, e, t) {
+    var q = { data: mii.data, width: v === 'spin' ? 256 : 512, bgColor: 'FFFFFF00', expression: e };
+    q.type = v === 'face' ? 'face' : 'all_body';
+    var y = v === 'left' ? 25 : v === 'right' ? -25 : 0;
+    if (t && v !== 'spin') {
+      y += t.y;
+      if (t.z) {
+        q.characterZRotate = (t.z + 360) % 360;
+      }
+    }
+    if (y) {
+      q.characterYRotate = (y + 360) % 360;
+    }
+    if (v === 'spin') {
+      q.instanceCount = SPIN_FRAMES;
+      q.instanceRotationMode = 'model';
+    }
+    if (cfg.clothes !== 'default') {
+      q.clothesColor = cfg.clothes;
+    }
+    if (cfg.pants !== 'default') {
+      q.pantsColor = cfg.pants;
+    }
+    if (cfg.body !== 'default') {
+      q.bodyType = cfg.body;
+    }
+    if (cfg.lighting !== 'wiiu') {
+      q.shaderType = cfg.lighting;
+    }
+    return API + '/miis/image.png?' + Object.keys(q).map(function (k) {
+      return k + '=' + encodeURIComponent(q[k]);
+    }).join('&');
+  }
+
+  // A picture from the handheld's cache, else from the renderer (and then kept).
+  function cached(url) {
+    if (urls[url]) {
+      return Promise.resolve(urls[url]);
+    }
+    if (!window.caches) {
+      return Promise.resolve(url);
+    }
+    return caches.open(CACHE).then(function (c) {
+      return c.match(url).then(function (hit) {
+        if (hit) {
+          return hit.blob();
+        }
+        return fetch(url).then(function (r) {
+          if (!r.ok) {
+            throw new Error('HTTP ' + r.status);
+          }
+          c.put(url, r.clone());
+          return r.blob();
+        });
+      });
+    }).then(function (blob) {
+      urls[url] = URL.createObjectURL(blob);
+      return urls[url];
+    }).catch(function () {
+      return url;
+    });
+  }
+
+  // ---------- Fitting the Mii to the widget ----------
+  // Where the Mii is in a render, as fractions of the picture (measured once per kind of view).
+  // Defaults from a typical Mii, used until the measure is done or if it fails.
+  var fit = { body: { x0: 0.38, y0: 0.37, x1: 0.62, y1: 0.95 }, face: { x0: 0.24, y0: 0.17, x1: 0.76, y1: 1 } };
+  var measured = {};
+
+  function kindOf(v) {
+    return v === 'face' ? 'face' : 'body';
+  }
+
+  // Finds the visible part of a picture (its non-transparent pixels).
+  function measure(kind) {
+    if (measured[kind]) {
+      return;
+    }
+    measured[kind] = true;
+    cached(imageUrl(kind, 'normal')).then(function (src) {
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var n = 160;
+          var c = document.createElement('canvas');
+          c.width = n;
+          c.height = n;
+          var x = c.getContext('2d');
+          x.drawImage(img, 0, 0, n, n);
+          var px = x.getImageData(0, 0, n, n).data;
+          var x0 = n, y0 = n, x1 = -1, y1 = -1;
+          for (var y = 0; y < n; y++) {
+            for (var i = 0; i < n; i++) {
+              if (px[(y * n + i) * 4 + 3] > 20) {
+                x0 = Math.min(x0, i);
+                x1 = Math.max(x1, i);
+                y0 = Math.min(y0, y);
+                y1 = Math.max(y1, y);
+              }
+            }
+          }
+          if (x1 > x0 && y1 > y0) {
+            fit[kind] = { x0: x0 / n, y0: y0 / n, x1: (x1 + 1) / n, y1: (y1 + 1) / n };
+            layout();
+          }
+        } catch (e) {
+          W.log('mii measure', String(e));
+        }
+      };
+      img.src = src;
+    });
+  }
+
+  // Places the picture so the Mii fills the widget with a small margin, above the name.
+  function layout() {
+    var st = W.$('stage');
+    var w = st.clientWidth;
+    var h = st.clientHeight;
+    if (!w || !h) {
+      return;
+    }
+    var f = fit[kindOf(view)];
+    var focused = Input.isFocusedView();
+    var top = h * (focused ? 0.1 : 0.05);
+    var bottom = h * (cfg.showName ? (focused ? 0.16 : 0.18) : 0.05);
+    var availW = w * 0.9;
+    var availH = h - top - bottom;
+    var bw = f.x1 - f.x0;
+    var bh = f.y1 - f.y0;
+    // Turns and tilts make the Mii a little wider: leave it room.
+    var size = Math.min(availW / (bw * 1.25), availH / bh);
+    var left = w / 2 - (f.x0 + bw / 2) * size;
+    var topPx = top + (availH - bh * size) / 2 - f.y0 * size;
+    [W.$('mii'), W.$('spin')].forEach(function (el) {
+      el.style.width = size + 'px';
+      el.style.height = size + 'px';
+      el.style.left = left + 'px';
+      el.style.top = topPx + 'px';
+    });
+  }
+
+  window.addEventListener('resize', layout);
+
+  // ---------- Showing ----------
+  function show() {
+    if (!mii) {
+      return;
+    }
+    document.documentElement.classList.remove('view-face', 'view-body', 'view-spin');
+    document.documentElement.classList.add('view-' + (view === 'face' ? 'face' : view === 'spin' ? 'spin' : 'body'));
+    W.$('hint').textContent = VIEWS[indexOf(VIEWS, view)][1] + ' · ' + EXPRESSIONS[indexOf(EXPRESSIONS, expr)][1] + ' · Left and right: view · Up and down: expression';
+    measure(kindOf(view));
+    layout();
+    clearInterval(spinTimer);
+    if (view === 'spin') {
+      showSpin();
+    } else {
+      var img = W.$('mii');
+      cached(imageUrl(view, expr, tilt)).then(function (src) {
+        img.onload = function () {
+          img.classList.remove('loading');
+        };
+        img.src = src;
+      });
+      // Ready the blink frame for this view.
+      if (cfg.blink) {
+        cached(imageUrl(view, 'blink', tilt));
+      }
+    }
+  }
+
+  // The renderer draws all the turns in one tall picture; the canvas shows them one after another.
+  function showSpin() {
+    var canvas = W.$('spin');
+    var ctx = canvas.getContext('2d');
+    var strip = new Image();
+    cached(imageUrl('spin', expr)).then(function (src) {
+      strip.onload = function () {
+        var size = strip.naturalWidth;
+        canvas.width = size;
+        canvas.height = size;
+        var frame = 0;
+        clearInterval(spinTimer);
+        spinTimer = setInterval(function () {
+          ctx.clearRect(0, 0, size, size);
+          ctx.drawImage(strip, 0, frame * size, size, size, 0, 0, size, size);
+          frame = (frame + 1) % SPIN_FRAMES;
+        }, 110);
+      };
+      strip.src = src;
+    });
+  }
+
+  // Blink: swap to the eyes-closed picture for a moment, every few seconds.
+  function scheduleBlink() {
+    clearTimeout(blinkTimer);
+    if (!cfg.blink) {
+      return;
+    }
+    blinkTimer = setTimeout(function () {
+      if (mii && view !== 'spin' && expr !== 'blink' && document.visibilityState === 'visible') {
+        var blinkUrl = urls[imageUrl(view, 'blink', tilt)];
+        var openUrl = urls[imageUrl(view, expr, tilt)];
+        if (blinkUrl && openUrl) {
+          var img = W.$('mii');
+          img.src = blinkUrl;
+          setTimeout(function () {
+            img.src = openUrl;
+          }, 140);
+        }
+      }
+      scheduleBlink();
+    }, 3000 + Math.random() * 4000);
+  }
+
+  // ---------- Animation ----------
+  // The renderer only draws still pictures, so the Mii comes alive by switching between them:
+  // lively picks a new expression every few seconds (with a little hop);
+  // chatty moves the mouth in short bursts, like talking.
+  var LIVELY_EXPR = ['normal', 'smile', 'smile', 'smile_open_mouth', 'wink_left', 'like_wink_left', 'surprise', 'surprise_open_mouth', 'sorrow', 'frustrated'];
+  var TALK = { normal: 'normal_open_mouth', smile: 'smile_open_mouth', anger: 'anger_open_mouth', sorrow: 'sorrow_open_mouth', surprise: 'surprise_open_mouth' };
+
+  function pick(list) {
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function canAnimate() {
+    return mii && view !== 'spin' && cfg.animation !== 'still' && Date.now() > manualUntil && document.visibilityState === 'visible';
+  }
+
+  function hop() {
+    var st = W.$('stage');
+    st.classList.remove('hop');
+    void st.offsetWidth;
+    st.classList.add('hop');
+    setTimeout(function () {
+      st.classList.remove('hop');
+    }, 450);
+  }
+
+  // Shows a pose once its picture is ready, so nothing flickers while it loads.
+  function goTo(e, t, withHop) {
+    var url = imageUrl(view, e, t);
+    return cached(url).then(function (src) {
+      var img = new Image();
+      img.onload = function () {
+        expr = e;
+        tilt = t;
+        W.$('mii').src = src;
+        W.$('mii').classList.remove('loading');
+        if (withHop) {
+          hop();
+        }
+        if (cfg.blink) {
+          cached(imageUrl(view, 'blink', tilt));
+        }
+      };
+      img.src = src;
+    });
+  }
+
+  function talk(done) {
+    var base = TALK[expr] ? expr : 'smile';
+    var open = TALK[base];
+    var baseTilt = tilt;
+    Promise.all([cached(imageUrl(view, base, baseTilt)), cached(imageUrl(view, open, baseTilt))]).then(function (srcs) {
+      var n = 6 + Math.floor(Math.random() * 10);
+      var img = W.$('mii');
+      (function flap(i) {
+        if (i >= n || !canAnimate()) {
+          img.src = srcs[0];
+          expr = base;
+          done();
+          return;
+        }
+        img.src = srcs[i % 2];
+        setTimeout(function () {
+          flap(i + 1);
+        }, 120 + Math.random() * 90);
+      })(0);
+    }).catch(done);
+  }
+
+  function animate() {
+    clearTimeout(animTimer);
+    var next = function (ms) {
+      animTimer = setTimeout(animate, ms);
+    };
+    if (!canAnimate()) {
+      next(2000);
+      return;
+    }
+    if (cfg.animation === 'chatty') {
+      talk(function () {
+        next(2500 + Math.random() * 5000);
+      });
+      return;
+    }
+    // Lively: a new expression, and back to the chosen one now and then. No turns: the renderer only
+    // gives still pictures, so a turn would jump instead of moving smoothly.
+    var e = Math.random() < 0.3 ? cfg.expression : pick(LIVELY_EXPR);
+    if (e === expr) {
+      next(1500);
+      return;
+    }
+    goTo(e, { y: 0, z: 0 }, true).then(function () {
+      next(3000 + Math.random() * 4000);
+    }, function () {
+      next(4000);
+    });
+  }
+
+  // ---------- Looking up the Mii ----------
+  function lookup() {
+    if (!cfg.nnid) {
+      message('Enter a Nintendo Network ID on the configurator page');
+      return;
+    }
+    var key = 'mii:' + cfg.network + ':' + cfg.nnid.toLowerCase();
+    var saved = W.store.get(key);
+    if (saved) {
+      mii = saved;
+      start();
+    }
+    // Refresh at most once a day (the Mii may have changed).
+    if (saved && W.store.get(key, 24 * 3600 * 1000)) {
+      return;
+    }
+    var url = API + '/mii_data/' + encodeURIComponent(cfg.nnid) + (cfg.network === 'pnid' ? '?api_id=1' : '');
+    fetch(url).then(function (r) {
+      if (r.status === 404) {
+        throw new Error('not found');
+      }
+      if (!r.ok) {
+        throw new Error('HTTP ' + r.status);
+      }
+      return r.json();
+    }).then(function (j) {
+      var fresh = { data: j.data, name: j.name || cfg.nnid };
+      W.store.set(key, fresh);
+      if (!mii || mii.data !== fresh.data) {
+        mii = fresh;
+        start();
+      }
+    }).catch(function (e) {
+      W.log('mii lookup', String(e));
+      if (!mii) {
+        message(String(e.message) === 'not found' ? 'No Mii found for ' + cfg.nnid : 'Could not reach the Mii renderer');
+      }
+    });
+  }
+
+  function start() {
+    message('');
+    W.$('name').textContent = cfg.showName ? mii.name : '';
+    show();
+    scheduleBlink();
+    W.$('stage').classList.toggle('alive', cfg.animation !== 'still');
+    clearTimeout(animTimer);
+    animTimer = setTimeout(animate, 3000);
+  }
+
+  // ---------- Controls (focused view) ----------
+  function step(list, current, dir) {
+    var i = indexOf(list, current);
+    return list[(i + dir + list.length) % list.length][0];
+  }
+
+  Input.on(function (a) {
+    if (!mii || !Input.isFocusedView()) {
+      return;
+    }
+    manualUntil = Date.now() + 15000;
+    tilt = { y: 0, z: 0 };
+    if (a.type === 'dir' && (a.dir === 'left' || a.dir === 'right')) {
+      view = step(VIEWS, view, a.dir === 'left' ? -1 : 1);
+    } else if ((a.type === 'dir' && (a.dir === 'up' || a.dir === 'down')) || a.type === 'a') {
+      expr = step(EXPRESSIONS, expr, a.dir === 'up' ? -1 : 1);
+    } else {
+      return;
+    }
+    show();
+  });
+
+  // Back to the tile: back to the configured view and expression.
+  W.onResize(function () {
+    if (mii && !Input.isFocusedView() && (view !== cfg.view || expr !== cfg.expression)) {
+      view = cfg.view;
+      expr = cfg.expression;
+      tilt = { y: 0, z: 0 };
+      manualUntil = 0;
+      show();
+    }
+  });
+
+  message('');
+  lookup();
+})();
+</script>
+</body>
+</html>

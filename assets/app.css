@@ -1031,3 +1031,16 @@ section.help strong {
   font-size: 13px;
 }
 
+/* ---------- Text options (Mii) ---------- */
+.text-opt {
+  min-width: 0;
+  width: 58%;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+

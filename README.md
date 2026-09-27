@@ -128,6 +128,16 @@ Cards can use `type: 'file'` options: the chosen file stays in memory on the pag
 
 The Hourly music widget has a test mode (`debug`): it shows the hour, the track, the position in the loop and the pass number, up and down step through the hours, and `cycle` runs a whole hour in 20 or 60 seconds.
 
+## Mii 3D
+
+`widgets/mii3d.html` shows the Mii of a Nintendo Network ID (or Pretendo Network ID) in 3D with [three.js](https://threejs.org/) (r147, MIT, see `widgets/vendor/three/LICENSE`). The head is the real 3D head from [ariankordi's Mii renderer](https://mii-unsecure.ariankordi.net/), one model per expression, kept in the Cache API once seen. The body is the Mii body model in `models/Mii (Default)/` (ripped by Centrixe at The Models Resource), on a small skeleton (waist, neck, arms with elbows, legs with knees and ankles) that plays baked animations: walk, run, wave, jump, two dances, nod, head shake, thumbs up, chat, sit on a stool, nap, roll, eat. Each movement changes the face along the way (surprised on takeoff, a wink at the end of a wave, chewing between bites). The same folder gives the default Mii head, shown without an ID or until the real head has loaded.
+
+It is also a small pet. Food, fun and energy (0 to 100) go down over real time and are kept in the handheld's storage per Mii (`mii3d-pet:<network>:<id>`), with the time of the last update, so the time the widget spends closed counts too. Asleep, energy comes back instead. The mood (happy, fine, hungry, sleepy, bored, grumpy, asleep) sets the face and what the Mii does on its own. Focused view: Feed (three bites of an apple, a rice ball or a donut), Play (a random dance, jump, run or roll), Chat, Sleep (lights out until it wakes up); tapping the Mii pets it. It refuses food when full and play when exhausted, goes to bed by itself when exhausted or between 22:00 and 7:00, and wakes up rested in the morning. "Needs" sets the pace (Normal, Relaxed at half speed, or Off). For testing, the URL parameter `petSpeed` makes time go faster (for example `petSpeed=120`, one hour in 30 seconds).
+
+The widget reads the body from `widgets/shared/mii-body.js`. After changing the models, rebuild it with `python tools/mii-body-build.py` (needs Pillow).
+
+The skeleton is in `widgets/shared/mii-rig.js`. The movements are baked in `widgets/shared/mii-anims.js` by `tools/mii-anim-build.html`, which retargets animations from `models/animations/` onto that skeleton: the [Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html) by Quaternius and [RobotExpressive](https://threejs.org/examples/models/gltf/RobotExpressive/) by Tomás Laulhé, both CC0. Limbs copy the direction of each source segment, so different proportions work; pelvis, chest, head and feet copy the source's rotation. To change the moves, edit `CLIPS` in the tool, serve the repository (`python -m http.server`), open `http://localhost:8000/tools/mii-anim-build.html` (it previews each animation next to the Mii) and click "Download mii-anims.js", then put the file in `widgets/shared/`.
+
 ## Fonts
 
 Widgets use Cal Sans, iiSU's default font (SIL Open Font License, see `fonts/Cal-Sans-OFL.txt`). It is embedded in every download, so it works offline.

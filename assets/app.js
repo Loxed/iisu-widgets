@@ -166,6 +166,54 @@
       ]
     },
     {
+      id: 'mii',
+      group: 'decor',
+      name: 'Mii',
+      desc: 'The Mii of a Nintendo Network ID, looked up in the archive of ariankordi\'s Mii renderer (or a Pretendo Network ID). Choose the body and lighting of the Wii U, 3DS, Switch or Miitomo. Focused: left and right change the view, up and down the expression. Kept on the handheld once seen, so it also shows offline.',
+      credits: [
+        { name: 'Mii Renderer (REAL)', by: 'ariankordi', url: 'https://mii-unsecure.ariankordi.net/', note: 'Mii lookup and rendering, Nintendo Network ID archive' },
+        { name: 'Miis', by: 'Nintendo' }
+      ],
+      options: [
+        { key: 'nnid', label: 'Network ID', type: 'text', def: '', placeholder: 'Your NNID' },
+        { key: 'network', label: 'Network', type: 'seg', def: 'nnid', choices: [['nnid', 'Nintendo Network'], ['pnid', 'Pretendo']] },
+        { key: 'view', label: 'View', type: 'seg', def: 'body', choices: [['face', 'Portrait'], ['body', 'Whole body'], ['spin', 'Spinning']] },
+        { key: 'expression', label: 'Expression', type: 'select', def: 'smile', choices: [['normal', 'Normal'], ['smile', 'Smile'], ['smile_open_mouth', 'Big smile'], ['wink_left', 'Wink'], ['like_wink_left', 'Cheeky wink'], ['surprise', 'Surprised'], ['surprise_open_mouth', 'Shocked'], ['anger', 'Angry'], ['sorrow', 'Sad'], ['frustrated', 'Frustrated'], ['blink', 'Eyes closed']] },
+        { key: 'clothes', label: 'Shirt', type: 'select', def: 'default', choices: [['default', 'Favorite color'], ['red', 'Red'], ['orange', 'Orange'], ['yellow', 'Yellow'], ['yellowgreen', 'Light green'], ['green', 'Green'], ['blue', 'Blue'], ['skyblue', 'Sky blue'], ['pink', 'Pink'], ['purple', 'Purple'], ['brown', 'Brown'], ['white', 'White'], ['black', 'Black']] },
+        { key: 'pants', label: 'Trousers', type: 'select', def: 'default', choices: [['default', 'Default'], ['gray', 'Gray'], ['red', 'Red'], ['blue', 'Blue'], ['gold', 'Gold']] },
+        { key: 'body', label: 'Body', type: 'select', def: 'default', choices: [['default', 'Default'], ['wiiu', 'Wii U'], ['3ds', '3DS'], ['switch', 'Switch'], ['miitomo', 'Miitomo / Mii Studio']] },
+        { key: 'lighting', label: 'Lighting', type: 'select', def: 'wiiu', choices: [['wiiu', 'Wii U'], ['wiiu_blinn', 'Wii U, shiny'], ['switch', 'Switch'], ['miitomo', 'Miitomo / Mii Studio'], ['light_disable', 'Flat']] },
+        { key: 'blink', label: 'Blink now and then', type: 'switch', def: true },
+        { key: 'animation', label: 'Animation', type: 'seg', def: 'lively', choices: [['still', 'Still'], ['lively', 'Lively'], ['chatty', 'Chatty']] },
+        { key: 'showName', label: 'Show the name', type: 'switch', def: true }
+      ]
+    },
+    {
+      id: 'mii3d',
+      group: 'decor',
+      name: 'Mii 3D',
+      desc: 'The Mii of a Nintendo Network ID as a little 3D pet. It gets hungry, bored and tired over real time, even with the widget closed, and its mood shows on its face and in what it does: walking, dancing, chatting, sitting on a stool, napping. Focused: left and right choose Feed, Play, Chat or Sleep, A does it, tap the Mii to pet it. It goes to bed by itself late at night. Without an ID it shows the default Mii.',
+      credits: [
+        { name: 'Mii Renderer (REAL)', by: 'ariankordi', url: 'https://mii-unsecure.ariankordi.net/', note: '3D Mii heads, Nintendo Network ID archive' },
+        { name: 'Mii body and default head models', by: 'Centrixe', note: 'ripped (The Models Resource)' },
+        { name: 'three.js', by: 'three.js authors', url: 'https://threejs.org/', note: 'MIT license' },
+        { name: 'Universal Animation Library', by: 'Quaternius', url: 'https://quaternius.com/packs/universalanimationlibrary.html', note: 'animations, CC0' },
+        { name: 'RobotExpressive', by: 'Tomás Laulhé', url: 'https://threejs.org/examples/models/gltf/RobotExpressive/', note: 'animations, CC0' },
+        { name: 'Miis', by: 'Nintendo' }
+      ],
+      options: [
+        { key: 'nnid', label: 'Network ID', type: 'text', def: '', placeholder: 'Your NNID' },
+        { key: 'network', label: 'Network', type: 'seg', def: 'nnid', choices: [['nnid', 'Nintendo Network'], ['pnid', 'Pretendo']] },
+        { key: 'expression', label: 'Usual face', type: 'select', def: 'smile', choices: [['normal', 'Normal'], ['smile', 'Smile'], ['smile_open_mouth', 'Big smile'], ['wink_left', 'Wink'], ['like_wink_left', 'Cheeky wink'], ['surprise', 'Surprised']] },
+        { key: 'shirt', label: 'Shirt', type: 'select', def: 'favorite', choices: [['favorite', 'Favorite color'], ['red', 'Red'], ['orange', 'Orange'], ['yellow', 'Yellow'], ['yellowgreen', 'Light green'], ['green', 'Green'], ['blue', 'Blue'], ['skyblue', 'Sky blue'], ['pink', 'Pink'], ['purple', 'Purple'], ['brown', 'Brown'], ['white', 'White'], ['black', 'Black']] },
+        { key: 'pants', label: 'Trousers', type: 'select', def: 'default', choices: [['default', 'Default'], ['gray', 'Gray'], ['red', 'Red'], ['blue', 'Blue'], ['gold', 'Gold']] },
+        { key: 'needs', label: 'Needs', type: 'seg', def: 'normal', choices: [['off', 'Off'], ['relaxed', 'Relaxed'], ['normal', 'Normal']] },
+        { key: 'motion', label: 'Movement', type: 'seg', def: 'lively', choices: [['still', 'Still'], ['calm', 'Calm'], ['lively', 'Lively']] },
+        { key: 'blink', label: 'Blink now and then', type: 'switch', def: true },
+        { key: 'showName', label: 'Show the name', type: 'switch', def: true }
+      ]
+    },
+    {
       id: 'scene',
       group: 'decor',
       name: 'Scene',
@@ -812,6 +860,12 @@
         control.addEventListener('click', function () {
           s[o.key] = !s[o.key];
           control.setAttribute('aria-checked', String(s[o.key]));
+          changed();
+        });
+      } else if (o.type === 'text') {
+        control = el('input', { type: 'text', class: 'text-opt', value: s[o.key] || '', placeholder: o.placeholder || '', 'aria-label': o.label, spellcheck: 'false', autocomplete: 'off' });
+        control.addEventListener('change', function () {
+          s[o.key] = control.value.trim();
           changed();
         });
       } else if (o.type === 'file') {

@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mii 3D Widget</title>
+<link rel="stylesheet" href="shared/base.css" data-inline>
+<style>
+  #root {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  #view {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Lights out while the Mii sleeps. */
+  #night {
+    position: absolute;
+    inset: 0;
+    background: #0b0d24;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #name {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 4cqmin;
+    text-align: center;
+    font-size: 7cqmin;
+    font-weight: 600;
+  }
+
+  #msg {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8cqmin;
+    text-align: center;
+    font-size: 5.5cqmin;
+    color: var(--muted);
+  }
+
+  /* Needs: food, fun, energy. A row at the top of the tile, a column in the focused view. */
+  #needs {
+    position: absolute;
+    top: 5cqmin;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 3.5cqmin;
+  }
+
+  .need {
+    display: flex;
+    align-items: center;
+    gap: 1.2cqmin;
+  }
+
+  .need .icon {
+    width: 5.5cqmin;
+    height: 5.5cqmin;
+    color: var(--c);
+  }
+
+  .need i {
+    display: block;
+    width: 13cqmin;
+    height: 2.4cqmin;
+    border-radius: 2cqmin;
+    background: rgba(128, 128, 128, 0.28);
+    overflow: hidden;
+  }
+
+  .need b {
+    display: block;
+    height: 100%;
+    width: 50%;
+    border-radius: inherit;
+    background: var(--c);
+    transition: width 0.6s;
+  }
+
+  .need.low b {
+    background: #ff5b5b;
+    animation: low 1s ease-in-out infinite alternate;
+  }
+
+  .need.low .icon {
+    color: #ff5b5b;
+  }
+
+  @keyframes low {
+    to {
+      opacity: 0.35;
+    }
+  }
+
+  #status {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 4.5cqmin;
+    text-align: center;
+    font-size: 5cqmin;
+    font-weight: 600;
+  }
+
+  #menu {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 4cqmin;
+    justify-content: center;
+    gap: 2.5cqmin;
+  }
+
+  #menu button {
+    display: flex;
+    align-items: center;
+    gap: 1.6cqmin;
+    padding: 1.8cqmin 3.6cqmin;
+    border: 0;
+    border-radius: 99px;
+    font: inherit;
+    font-size: 4.2cqmin;
+    font-weight: 600;
+    color: var(--fg);
+    background: rgba(128, 128, 128, 0.22);
+    transition: transform 0.15s, background 0.15s;
+  }
+
+  #menu button .icon {
+    width: 4.8cqmin;
+    height: 4.8cqmin;
+  }
+
+  #menu button.sel {
+    background: var(--strong);
+    color: var(--on-strong);
+    transform: scale(1.08);
+  }
+
+  /* Floating "z" letters while the Mii sleeps, hearts when it is happy. */
+  .zzz, .heart {
+    position: absolute;
+    font-weight: 600;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .zzz {
+    font-size: 6cqmin;
+    animation: zfloat 2.4s ease-out forwards;
+  }
+
+  .heart {
+    font-size: 7cqmin;
+    color: #ff5f9a;
+    animation: hfloat 1.6s ease-out forwards;
+  }
+
+  @keyframes zfloat {
+    0% {
+      opacity: 0;
+      transform: translate(0, 0) scale(0.6);
+    }
+
+    20% {
+      opacity: 0.9;
+    }
+
+    100% {
+      opacity: 0;
+      transform: translate(4cqmin, -12cqmin) scale(1.2);
+    }
+  }
+
+  @keyframes hfloat {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, 0) scale(0.4);
+    }
+
+    25% {
+      opacity: 1;
+      transform: translate(-50%, -3cqmin) scale(1.1);
+    }
+
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -14cqmin) scale(0.9);
+    }
+  }
+
+  @container (min-aspect-ratio: 3/2) {
+    #name {
+      display: none;
+    }
+
+    #status {
+      display: block;
+    }
+
+    #menu {
+      display: flex;
+    }
+
+    #needs {
+      top: 5cqmin;
+      left: 5cqmin;
+      right: auto;
+      flex-direction: column;
+      gap: 2cqmin;
+    }
+
+    .need .icon {
+      width: 4.6cqmin;
+      height: 4.6cqmin;
+    }
+
+    .need i {
+      width: 16cqmin;
+      height: 2cqmin;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <canvas id="view"></canvas>
+  <div id="night"></div>
+  <div id="needs"></div>
+  <div id="status"></div>
+  <div id="name"></div>
+  <div id="menu"></div>
+  <div id="msg"></div>
+</div>
+
+<script id="widget-config" type="application/json">{}</script>
+<script src="shared/fonts.js" data-inline></script>
+<script src="shared/icons.js" data-inline></script>
+<script src="shared/runtime.js" data-inline></script>
+<script src="shared/input.js" data-inline></script>
+<script src="vendor/three/three.min.js" data-inline></script>
+<script src="vendor/three/GLTFLoader.js" data-inline></script>
+<script src="shared/mii-body.js" data-inline></script>
+<script src="shared/mii-rig.js" data-inline></script>
+<script src="shared/mii-anims.js" data-inline></script>
+<script>
+// Mii 3D: the Mii of a Nintendo Network ID as a little 3D pet.
+// The head is the real 3D head from ariankordi's Mii renderer (one model per expression). The body is
+// the Mii body model from models/Mii (Default)/ (shared/mii-body.js) on the skeleton of
+// shared/mii-rig.js, stretched by the Mii's height and build, in its favorite color. The movements are
+// the baked animations of shared/mii-anims.js, each with its own changes of expression.
+// Like a Tamagotchi, the Mii gets hungry, bored and tired over real time (also while the widget is
+// closed): feed it, play with it, chat with it, put it to bed. Its mood shows on its face and in what it
+// does on its own. It goes to bed by itself when it is exhausted or late at night.
+// Focused view: left and right choose Feed, Play, Chat or Sleep, A does it; tap the Mii to pet it.
+// Without an ID it shows the default Mii.
+(function () {
+  var cfg = W.config({
+    nnid: '',             // Nintendo Network ID (or Pretendo Network ID)
+    network: 'nnid',      // nnid or pnid
+    expression: 'smile',  // usual face when it is doing fine
+    shirt: 'favorite',    // favorite (the Mii's favorite color) or a color name
+    pants: 'default',     // default, gray, red, blue, gold
+    needs: 'normal',      // normal, relaxed (half as fast) or off (no needs, no bars)
+    motion: 'lively',     // lively (does something every few seconds), calm or still
+    blink: true,
+    showName: true,
+    petSpeed: 1           // testing: how many times faster time goes for the needs
+  });
+
+  var API = 'https://mii-unsecure.ariankordi.net';
+  var CACHE = 'iisu-widgets-mii';
+
+  // Mii favorite colors (index 0 to 11) and the shirt choices.
+  var FAVORITE = ['#d21e14', '#ff6e19', '#ffd820', '#78d220', '#007830', '#0a48b4', '#3caade', '#f55a7d', '#7328ad', '#483818', '#e0e0e0', '#181814'];
+  var SHIRTS = { red: 0, orange: 1, yellow: 2, yellowgreen: 3, green: 4, blue: 5, skyblue: 6, pink: 7, purple: 8, brown: 9, white: 10, black: 11 };
+  var PANTS = { default: '#3a4150', gray: '#6b6f78', red: '#8e1f1f', blue: '#1f3e8e', gold: '#b08a2e' };
+
+  var mii = null;
+  var info = { fav: 5, height: 64, build: 64 };
+  var urls = {};
+
+  function message(text) {
+    W.$('msg').textContent = text;
+    W.$('msg').style.display = text ? '' : 'none';
+  }
+
+  // ---------- Mii data ----------
+  // The renderer's lookup gives 3DS / Wii U store data (base64). Useful fields for the body:
+  // 0x18 (16 bits): gender, birthday and favorite color (bits 10 to 13); 0x2E height; 0x2F build.
+  function decode(b64) {
+    try {
+      var bin = atob(b64);
+      var u16 = bin.charCodeAt(0x18) | (bin.charCodeAt(0x19) << 8);
+      return { fav: (u16 >> 10) & 15, height: bin.charCodeAt(0x2e), build: bin.charCodeAt(0x2f) };
+    } catch (e) {
+      return { fav: 5, height: 64, build: 64 };
+    }
+  }
+
+  function cached(url) {
+    if (urls[url]) {
+      return Promise.resolve(urls[url]);
+    }
+    var get = window.caches ? caches.open(CACHE).then(function (c) {
+      return c.match(url).then(function (hit) {
+        return hit || fetch(url).then(function (r) {
+          if (!r.ok) {
+            throw new Error('HTTP ' + r.status);
+          }
+          c.put(url, r.clone());
+          return r;
+        });
+      });
+    }) : fetch(url);
+    return get.then(function (r) {
+      return r.blob();
+    }).then(function (blob) {
+      urls[url] = URL.createObjectURL(blob);
+      return urls[url];
+    });
+  }
+
+  function headUrl(e) {
+    return API + '/miis/image.glb?data=' + encodeURIComponent(mii.data) + '&type=face&expression=' + e;
+  }
+
+  // ---------- Scene ----------
+  var canvas = W.$('view');
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+  renderer.setClearColor(0x000000, 0);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(28, 1, 10, 2000);
+  var sky = new THREE.HemisphereLight(0xffffff, 0x8a93a6, 0.85);
+  scene.add(sky);
+  var sun = new THREE.DirectionalLight(0xffffff, 0.75);
+  sun.position.set(60, 140, 160);
+  scene.add(sun);
+  var loader = new THREE.GLTFLoader();
+
+  function lin(c) {
+    return new THREE.Color(c).convertSRGBToLinear();
+  }
+
+  // ---------- Body ----------
+  // Units are the head model's units: the body is about 131 tall, the head sits on the collar.
+  var M = window.MII_MODEL;
+  var texImages = {};
+  Object.keys(M.tex).forEach(function (k) {
+    texImages[k] = new Image();
+    texImages[k].src = M.tex[k];
+  });
+
+  // A texture painted on a canvas: the model's shading multiplied by a color. The shirt also has a
+  // mask for the hands and neck, which get the skin color.
+  function tinted(name, color, skin) {
+    var img = texImages[name];
+    var c = document.createElement('canvas');
+    c.width = c.height = 256;
+    var t = new THREE.CanvasTexture(c);
+    t.encoding = THREE.sRGBEncoding;
+    function paint() {
+      var x = c.getContext('2d');
+      x.drawImage(img, 0, 0, 256, 256);
+      var d = x.getImageData(0, 0, 256, 256);
+      var a = new THREE.Color(color);
+      var b = new THREE.Color(skin || color);
+      for (var i = 0; i < d.data.length; i += 4) {
+        var shade = d.data[i] / 255;
+        var m = name === 'shirt' ? d.data[i + 1] / 255 : 0;
+        d.data[i] = 255 * shade * (a.r + (b.r - a.r) * m);
+        d.data[i + 1] = 255 * shade * (a.g + (b.g - a.g) * m);
+        d.data[i + 2] = 255 * shade * (a.b + (b.b - a.b) * m);
+        d.data[i + 3] = 255;
+      }
+      x.putImageData(d, 0, 0);
+      t.needsUpdate = true;
+    }
+    if (img.complete) {
+      paint();
+    } else {
+      img.onload = paint;
+    }
+    return t;
+  }
+
+  var rig = null;
+  var skinColor = M.skin;
+  var shirtTex = null;
+  var clips = MiiRig.clips(THREE);
+  var mixer = null;
+
+  function shirtColor() {
+    return cfg.shirt === 'favorite' ? FAVORITE[info.fav] || FAVORITE[5] : FAVORITE[SHIRTS[cfg.shirt]] || FAVORITE[5];
+  }
+
+  function buildBody() {
+    if (rig) {
+      scene.remove(rig.root);
+      scene.remove(rig.shadow);
+      mixer.stopAllAction();
+    }
+    var r = {};
+    r.root = new THREE.Group();
+    // Height and build stretch the body like in the Mii Maker (the head keeps its size).
+    r.sy = 0.84 + 0.3 * info.height / 127;
+    r.sx = 0.8 + 0.42 * info.build / 127;
+    r.root.scale.set(r.sx, r.sy, r.sx);
+    shirtTex = tinted('shirt', shirtColor(), skinColor);
+    var body = MiiRig.body(THREE, {
+      shirt: new THREE.MeshLambertMaterial({ map: shirtTex }),
+      pants: new THREE.MeshLambertMaterial({ map: tinted('pants', PANTS[cfg.pants] || PANTS.default) }),
+      shoes: new THREE.MeshLambertMaterial({ map: tinted('shoes', '#4a4a52') })
+    });
+    r.body = body.group;
+    r.bones = body.bones;
+    r.root.add(r.body);
+
+    // The head sits on the collar and keeps its own size whatever the body's height and build.
+    r.head = new THREE.Group();
+    r.head.position.y = -8;
+    r.head.scale.set(1 / r.sx, 1 / r.sy, 1 / r.sx);
+    r.bones.neck.add(r.head);
+
+    // Food is held in the right hand (the end of the forearm, which points along x in the T pose).
+    r.hand = new THREE.Group();
+    r.hand.position.set(32, 0, 0);
+    r.hand.scale.set(1.3 / r.sx, 1.3 / r.sy, 1.3 / r.sx);
+    r.bones.foreR.add(r.hand);
+
+    // A round stool that comes out when the Mii sits down, just under its hips.
+    var seat = clips.sit ? clips.sit.tracks[0].values : [0, 30, 0];
+    var h = seat[1] - 7;
+    r.stool = new THREE.Group();
+    var leg = new THREE.Mesh(new THREE.CylinderGeometry(13, 15, h, 28), new THREE.MeshLambertMaterial({ color: lin('#c9b48c') }));
+    leg.position.y = h / 2;
+    var top = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 3, 28), new THREE.MeshLambertMaterial({ color: lin('#e2d2b0') }));
+    top.position.y = h - 1.5;
+    r.stool.add(leg, top);
+    r.stool.position.set(seat[0], 0, seat[2]);
+    r.stool.scale.setScalar(0.001);
+    r.stool.visible = false;
+    r.root.add(r.stool);
+
+    // Soft round shadow on the floor, under the hips.
+    var shadow = new THREE.Mesh(new THREE.CircleGeometry(28 * r.sx, 32), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.16, depthWrite: false }));
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = 0.2;
+    scene.add(shadow);
+    r.shadow = shadow;
+
+    scene.add(r.root);
+    rig = r;
+    mixer = new THREE.AnimationMixer(r.body);
+    playing = null;
+    seq = null;
+    shownHead = null;
+    setHead(heads[expr] ? expr : 'default');
+    if (pet.sleeping) {
+      sleepNow(true);
+    } else {
+      fadeTo('idle', {});
+    }
+  }
+
+  // The hands and neck take the skin color of the head's face.
+  function setSkin(color) {
+    if (color === skinColor) {
+      return;
+    }
+    skinColor = color;
+    if (rig) {
+      var old = shirtTex;
+      shirtTex = tinted('shirt', shirtColor(), skinColor);
+      rig.root.traverse(function (o) {
+        if (o.isMesh && o.material.map === old) {
+          o.material.map = shirtTex;
+          o.material.needsUpdate = true;
+        }
+      });
+      old.dispose();
+    }
+  }
+
+  // The default Mii head, shown until the real head has loaded (and when there is no Mii).
+  function defaultHead() {
+    var g = new THREE.Group();
+    var H = M.head;
+    var skin = new THREE.MeshLambertMaterial({ color: lin(M.skin) });
+    g.add(new THREE.Mesh(MiiRig.geometry(THREE, H.faceline), skin));
+    g.add(new THREE.Mesh(MiiRig.geometry(THREE, H.nose), skin));
+    g.add(new THREE.Mesh(MiiRig.geometry(THREE, H.hair), new THREE.MeshLambertMaterial({ color: lin(M.hair) })));
+    [['mask', 'face'], ['noseline', 'noseline']].forEach(function (k) {
+      var t = new THREE.Texture(texImages[k[1]]);
+      t.encoding = THREE.sRGBEncoding;
+      var draw = function () {
+        t.needsUpdate = true;
+      };
+      if (texImages[k[1]].complete) {
+        draw();
+      } else {
+        texImages[k[1]].addEventListener('load', draw);
+      }
+      var m = new THREE.Mesh(MiiRig.geometry(THREE, H[k[0]]), new THREE.MeshLambertMaterial({ map: t, transparent: true, depthWrite: false }));
+      m.renderOrder = 1;
+      g.add(m);
+    });
+    return g;
+  }
+
+  // ---------- Food ----------
+  // Three snacks made of simple shapes, about the size of the Mii's hand.
+  function mesh(geo, color) {
+    return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: lin(color) }));
+  }
+
+  var FOODS = [
+    function apple() {
+      var g = new THREE.Group();
+      var body = mesh(new THREE.SphereGeometry(8, 20, 14), '#e8322c');
+      body.scale.y = 0.9;
+      var stem = mesh(new THREE.CylinderGeometry(0.7, 0.7, 4, 6), '#6b4322');
+      stem.position.y = 8;
+      var leaf = mesh(new THREE.SphereGeometry(2.6, 10, 6), '#4fb33a');
+      leaf.scale.set(1, 0.35, 0.6);
+      leaf.position.set(2.4, 8.4, 0);
+      leaf.rotation.z = -0.5;
+      g.add(body, stem, leaf);
+      return g;
+    },
+    function riceBall() {
+      var g = new THREE.Group();
+      var rice = mesh(new THREE.CylinderGeometry(8.5, 8.5, 7, 3), '#f7f4ec');
+      rice.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+      var seaweed = mesh(new THREE.BoxGeometry(6, 5, 7.6), '#1f2a22');
+      seaweed.position.y = -3.5;
+      g.add(rice, seaweed);
+      return g;
+    },
+    function donut() {
+      var g = new THREE.Group();
+      var dough = mesh(new THREE.TorusGeometry(6, 3.2, 12, 24), '#d69a55');
+      var icing = mesh(new THREE.TorusGeometry(6, 3.4, 12, 24), '#ff8fc0');
+      icing.scale.z = 0.6;
+      icing.position.z = 1.6;
+      g.add(dough, icing);
+      return g;
+    }
+  ];
+
+  // ---------- Heads (one 3D model per expression) ----------
+  var heads = { default: defaultHead() };
+  var headLoading = {};
+  var expr = cfg.expression;
+  var shownHead = null;
+
+  function loadHead(e) {
+    if (heads[e]) {
+      return Promise.resolve(heads[e]);
+    }
+    if (!mii) {
+      return Promise.reject(new Error('no Mii'));
+    }
+    if (headLoading[e]) {
+      return headLoading[e];
+    }
+    headLoading[e] = cached(headUrl(e)).then(function (src) {
+      return new Promise(function (resolve, reject) {
+        loader.load(src, function (gltf) {
+          var h = gltf.scene;
+          h.traverse(function (o) {
+            if (o.isMesh && o.material) {
+              o.material.metalness = 0;
+              o.material.roughness = 1;
+              // The hands get the skin color of the face.
+              if (/Faceline/.test(o.material.name)) {
+                setSkin('#' + o.material.color.clone().convertLinearToSRGB().getHexString());
+              }
+            }
+          });
+          heads[e] = h;
+          resolve(h);
+        }, undefined, reject);
+      });
+    });
+    return headLoading[e];
+  }
+
+  function setHead(e) {
+    if (!rig || !heads[e] || shownHead === heads[e]) {
+      return;
+    }
+    if (shownHead) {
+      rig.head.remove(shownHead);
+    }
+    shownHead = heads[e];
+    rig.head.add(shownHead);
+  }
+
+  // Show an expression (it loads the first time; until then the previous face stays).
+  function showExpression(e) {
+    expr = e;
+    loadHead(e).then(function () {
+      if (expr === e && !blinking && !mouthOpen) {
+        setHead(e);
+      }
+    }).catch(function (err) {
+      if (mii) {
+        W.log('mii3d head', String(err));
+      }
+    });
+  }
+
+  // Load the faces the movements use, one after the other, so they are ready when needed.
+  var FACES = ['smile', 'blink', 'smile_open_mouth', 'normal', 'surprise', 'surprise_open_mouth', 'like_wink_left', 'frustrated', 'sorrow', 'anger'];
+
+  function preloadFaces(i) {
+    if (!mii || i >= FACES.length) {
+      return;
+    }
+    loadHead(FACES[i]).catch(function () {}).then(function () {
+      preloadFaces(i + 1);
+    });
+  }
+
+  // ---------- Needs ----------
+  // Food, fun and energy, from 0 to 100, kept on the handheld per Mii. They change with real time:
+  // "t" is when they were last brought up to date, so time spent with the widget closed counts too.
+  var PET_KEY = 'mii3d-pet:' + cfg.network + ':' + (cfg.nnid || 'default').toLowerCase();
+  var pet = W.store.get(PET_KEY) || { food: 80, fun: 80, energy: 85, sleeping: false, t: Date.now() };
+  // Change per hour, awake and asleep.
+  var RATES = { awake: { food: -12, fun: -14, energy: -7 }, asleep: { food: -4, fun: -2, energy: 34 } };
+
+  function pace() {
+    return cfg.needs === 'off' ? 0 : (cfg.needs === 'relaxed' ? 0.5 : 1) * (+cfg.petSpeed || 1);
+  }
+
+  function clamp(v) {
+    return Math.max(0, Math.min(100, v));
+  }
+
+  function bump(k, v) {
+    pet[k] = clamp(pet[k] + v);
+  }
+
+  function age() {
+    var now = Date.now();
+    var hours = Math.min(72, Math.max(0, now - pet.t) / 3600000) * pace();
+    var r = pet.sleeping ? RATES.asleep : RATES.awake;
+    Object.keys(r).forEach(function (k) {
+      bump(k, r[k] * hours);
+    });
+    pet.t = now;
+  }
+
+  function save() {
+    age();
+    W.store.set(PET_KEY, pet);
+  }
+
+  age();
+  window.addEventListener('pagehide', save);
+  document.addEventListener('visibilitychange', save);
+
+  function night() {
+    var h = new Date().getHours();
+    return h >= 22 || h < 7;
+  }
+
+  // Mood: [label, face]. The face of "fine" is the usual face chosen on the configurator page.
+  var MOODS = {
+    happy: ['Happy', 'smile'],
+    fine: ['Fine', null],
+    hungry: ['Hungry', 'sorrow'],
+    sleepy: ['Sleepy', 'normal'],
+    bored: ['Bored', 'frustrated'],
+    grumpy: ['Grumpy', 'anger'],
+    asleep: ['Asleep', 'blink']
+  };
+
+  function mood() {
+    if (pet.sleeping) {
+      return 'asleep';
+    }
+    if (cfg.needs === 'off') {
+      return 'fine';
+    }
+    if (pet.food < 15 && pet.fun < 15) {
+      return 'grumpy';
+    }
+    if (pet.food < 25) {
+      return 'hungry';
+    }
+    if (pet.energy < 25) {
+      return 'sleepy';
+    }
+    if (pet.fun < 25) {
+      return 'bored';
+    }
+    if (pet.food > 65 && pet.fun > 65 && pet.energy > 45) {
+      return 'happy';
+    }
+    return 'fine';
+  }
+
+  function moodFace() {
+    return MOODS[mood()][1] || cfg.expression;
+  }
+
+  // ---------- Movements ----------
+  // A movement is a list of steps. A step plays a clip (once, "repeat" times, or looped for "time"
+  // seconds) or holds the last pose ("hold" seconds). "move": goes across the floor at that speed,
+  // turned sideways. "stop": stops at the edge instead of turning back. "turn": turns by that angle.
+  // "face": the expression, or a list of [seconds, expression] changes through the step (no face:
+  // the face of the mood). "talk": the mouth moves. "stool": the stool is out. "nap": lying down (the
+  // body is kept in view). "sleep": eyes closed and "z"s. "eat": brings food to the mouth.
+  var MOVES = {
+    walk: [{ clip: 'walk', time: 5, move: 40 }],
+    run: [{ clip: 'run', time: 3, move: 110, face: [[0, 'surprise_open_mouth'], [0.5, 'smile_open_mouth']] }],
+    wave: [{ clip: 'wave', repeat: 2, face: [[0, 'smile_open_mouth'], [2.3, 'like_wink_left'], [3.2, 'smile']] }],
+    jump: [{ clip: 'jump', repeat: 2, face: [[0, 'surprise'], [0.22, 'smile_open_mouth'], [0.64, 'surprise'], [0.86, 'smile_open_mouth']] }],
+    dance: [{ clip: 'dance', time: 4.5, face: 'dance' }],
+    robotDance: [{ clip: 'robotDance', time: 4.95, face: [[0, 'normal'], [1.2, 'surprise'], [1.7, 'smile_open_mouth'], [3.1, 'like_wink_left'], [3.8, 'smile_open_mouth']] }],
+    yes: [{ clip: 'yes', face: 'smile' }],
+    no: [{ clip: 'no', face: 'frustrated' }],
+    thumbsUp: [{ clip: 'thumbsUp', face: [[0, 'smile'], [0.5, 'like_wink_left'], [1.3, 'smile']] }],
+    talk: [{ clip: 'talk', time: 4.4, talk: true }],
+    sit: [{ clip: 'sitDown', turn: 0.5, stool: true }, { clip: 'sit', time: 6, turn: 0.5, stool: true }, { clip: 'standUp', turn: 0.5, stool: true }],
+    nap: [
+      { clip: 'fall', speed: 0.6, turn: 1.3, nap: true, face: [[0, 'surprise'], [1.2, 'blink']] },
+      { hold: 6, turn: 1.3, nap: true, sleep: true, face: 'blink' },
+      { clip: 'fall', speed: -1, turn: 1.3, nap: true, face: [[0, 'blink'], [0.8, 'surprise'], [1.6, 'smile']] }
+    ],
+    roll: [{ clip: 'roll', move: 75, stop: true, face: [[0, 'surprise_open_mouth'], [1.1, 'smile_open_mouth']] }],
+    // Care
+    eat: [{ clip: 'idle', time: 3.9, eat: true }, { clip: 'yes', face: 'smile', hearts: 3 }],
+    pet: [{ clip: 'thumbsUp', face: [[0, 'smile_open_mouth'], [0.6, 'like_wink_left'], [1.3, 'smile']], hearts: 2 }],
+    refuse: [{ clip: 'no', face: 'frustrated' }],
+    sleep: [
+      { clip: 'fall', speed: 0.6, turn: 1.3, nap: true, face: 'blink' },
+      { hold: Infinity, turn: 1.3, nap: true, sleep: true, face: 'blink' },
+      { clip: 'fall', speed: -1, turn: 1.3, nap: true, face: 'wake' }
+    ]
+  };
+  var DANCE_FACES = ['smile_open_mouth', 'like_wink_left', 'smile_open_mouth', 'smile'];
+  // What each mood feels like doing on its own.
+  var POOLS = {
+    happy: ['walk', 'run', 'wave', 'jump', 'dance', 'robotDance', 'thumbsUp', 'roll', 'talk', 'walk'],
+    fine: ['walk', 'wave', 'talk', 'sit', 'yes', 'dance', 'walk', 'thumbsUp'],
+    hungry: ['sit', 'walk', 'no', 'sit', 'talk'],
+    sleepy: ['sit', 'walk', 'nap', 'sit'],
+    bored: ['walk', 'sit', 'no', 'walk', 'talk'],
+    grumpy: ['no', 'walk', 'sit', 'no']
+  };
+  var CALM = ['walk', 'talk', 'sit', 'yes', 'no', 'nap', 'thumbsUp', 'wave'];
+
+  var seq = null;          // the movement being played
+  var seqName = '';
+  var stepIndex = 0;
+  var stepStart = 0;
+  var stepEnd = 0;
+  var playing = null;      // the three.js action playing now
+  var walkX = 0;           // position across the floor
+  var walkDir = 1;
+  var turnDir = 1;
+  var facing = 0;          // turn around the vertical axis
+  var stoolK = 0;
+  var grumpyWake = false;
+  var food = null;
+  var bites = 0;
+
+  // Start a clip, fading from the one before. opts: speed, repeat, looped, atEnd (jump to its last
+  // frame). Returns its length in seconds.
+  function fadeTo(name, opts) {
+    var clip = clips[name];
+    if (!clip || !mixer) {
+      return 0;
+    }
+    var a = mixer.clipAction(clip);
+    var speed = opts.speed || 1;
+    a.reset();
+    a.timeScale = speed;
+    if (opts.looped || (clip.loop && !opts.repeat)) {
+      a.setLoop(THREE.LoopRepeat, Infinity);
+    } else {
+      a.setLoop(opts.repeat ? THREE.LoopRepeat : THREE.LoopOnce, opts.repeat || 1);
+      a.clampWhenFinished = true;
+    }
+    if (speed < 0 || opts.atEnd) {
+      a.time = clip.duration;
+    }
+    a.play();
+    if (playing && playing !== a) {
+      playing.crossFadeTo(a, opts.atEnd ? 0.01 : 0.3, false);
+    }
+    playing = a;
+    return clip.duration * (opts.repeat || 1) / Math.abs(speed);
+  }
+
+  function play(name) {
+    if (!MOVES[name] || !rig) {
+      return;
+    }
+    dropFood();
+    seq = MOVES[name];
+    seqName = name;
+    stepIndex = 0;
+    // Go toward the side with more room; turn toward the middle.
+    walkDir = walkX > 0 ? -1 : walkX < 0 ? 1 : (Math.random() < 0.5 ? -1 : 1);
+    turnDir = -walkDir;
+    startStep();
+  }
+
+  function startStep() {
+    var st = seq[stepIndex];
+    var len = st.clip ? fadeTo(st.clip, { speed: st.speed, repeat: st.repeat, looped: !!st.time }) : 0;
+    stepStart = clock;
+    stepEnd = clock + (st.time || st.hold || len);
+    if (st.hearts) {
+      hearts(st.hearts);
+    }
+    if (st.eat) {
+      food = FOODS[Math.floor(Math.random() * FOODS.length)]();
+      food.scale.setScalar(0.01);
+      rig.hand.add(food);
+      bites = 0;
+    }
+  }
+
+  function finish() {
+    dropFood();
+    seq = null;
+    seqName = '';
+    fadeTo('idle', {});
+    var calm = cfg.motion === 'calm';
+    nextAction = clock + (calm ? 8 : 3) + Math.random() * (calm ? 10 : 4);
+  }
+
+  function dropFood() {
+    if (food && rig) {
+      rig.hand.remove(food);
+    }
+    food = null;
+  }
+
+  // Straight to sleep: lying down with the lights out (now: already lying, when the widget opens).
+  function sleepNow(now) {
+    pet.sleeping = true;
+    save();
+    if (now) {
+      dropFood();
+      seq = MOVES.sleep;
+      seqName = 'sleep';
+      stepIndex = 1;
+      turnDir = walkX > 0 ? -1 : 1;
+      fadeTo('fall', { atEnd: true });
+      stepStart = clock;
+      stepEnd = Infinity;
+      nightK = 1;
+      facing = turnDir * 1.3;
+    } else {
+      play('sleep');
+    }
+  }
+
+  var noAutoSleepUntil = 0;
+
+  function wake(byUser) {
+    grumpyWake = pet.energy < 50;
+    pet.sleeping = false;
+    save();
+    if (byUser && night()) {
+      noAutoSleepUntil = clock + 1800;
+    }
+    if (seqName === 'sleep' && stepIndex < 2) {
+      stepIndex = 2;
+      startStep();
+    }
+  }
+
+  // The expression for the current step at this moment.
+  function stepFace(st, t) {
+    var f = st.face;
+    if (f === 'dance') {
+      return DANCE_FACES[Math.floor(t / 0.55) % DANCE_FACES.length];
+    }
+    if (f === 'wake') {
+      f = [[0, 'blink'], [0.7, 'surprise'], [1.4, grumpyWake ? 'frustrated' : 'smile']];
+    }
+    if (st.eat) {
+      return eatFace(t);
+    }
+    if (Array.isArray(f)) {
+      var out = f[0][1];
+      f.forEach(function (k) {
+        if (t >= k[0]) {
+          out = k[1];
+        }
+      });
+      return out;
+    }
+    return f || moodFace();
+  }
+
+  // ---------- Eating ----------
+  // Three bites: the mouth opens, the food shrinks, the Mii chews.
+  var BITES = [1.0, 1.9, 2.8];
+
+  function eatFace(t) {
+    for (var i = 0; i < BITES.length; i++) {
+      if (t >= BITES[i] - 0.35 && t < BITES[i]) {
+        return 'smile_open_mouth';
+      }
+      if (t >= BITES[i] && t < BITES[i] + 0.55) {
+        return Math.floor((t - BITES[i]) / 0.14) % 2 ? 'smile' : 'normal';
+      }
+    }
+    return t > BITES[2] + 0.55 ? 'smile' : 'surprise';
+  }
+
+  function eatStep(t) {
+    while (bites < BITES.length && t >= BITES[bites]) {
+      bites++;
+      bump('food', 13);
+      bump('fun', 1);
+    }
+    if (food) {
+      var pop = Math.min(1, t / 0.25);
+      food.scale.setScalar(Math.max(0.01, pop * (1 - bites / BITES.length)));
+    }
+    // The right arm brings the hand up to the mouth, blended over the idle movement.
+    var w = Math.min(1, t / 0.5) * Math.min(1, Math.max(0, (3.9 - t) / 0.5));
+    armToMouth(w, Math.sin(t * 9) * 0.04);
+  }
+
+  var V = THREE.Vector3;
+  var Q = THREE.Quaternion;
+  var X = new V(1, 0, 0);
+  var Z = new V(0, 0, 1);
+
+  function basis(axis, hint) {
+    var a = axis.clone().normalize();
+    var h = hint.clone().sub(a.clone().multiplyScalar(hint.dot(a))).normalize();
+    return new THREE.Matrix4().makeBasis(a, h, new V().crossVectors(a, h));
+  }
+
+  function fromTo(axis, hint) {
+    return new Q().setFromRotationMatrix(basis(axis, hint).multiply(basis(X, Z).transpose()));
+  }
+
+  function armToMouth(w, wobble) {
+    if (w <= 0) {
+      return;
+    }
+    rig.root.updateMatrixWorld(true);
+    var bodyInv = rig.body.getWorldQuaternion(new Q()).invert();
+    var spine = bodyInv.multiply(rig.bones.spine.getWorldQuaternion(new Q()));
+    var u = new V(0.3, -0.55, 0.75).normalize();
+    var f = new V(-0.35, 0.95 + wobble, 0.25).normalize();
+    var h = f.clone().sub(u.clone().multiplyScalar(f.dot(u))).normalize();
+    var armW = fromTo(u, h);
+    var n = new V().crossVectors(u, h);
+    var foreW = fromTo(f, new V().crossVectors(n, f));
+    var armL = spine.clone().invert().multiply(armW);
+    var foreL = armW.clone().invert().multiply(foreW);
+    rig.bones.armR.quaternion.slerp(armL, w);
+    rig.bones.foreR.quaternion.slerp(foreL, w);
+  }
+
+  // ---------- Care (the menu) ----------
+  var ICONS = {
+    apple: '<path d="M12 6.528V3a1 1 0 0 1 1-1h0" /><path d="M18.237 21A15 15 0 0 0 22 11a6 6 0 0 0-10-4.472A6 6 0 0 0 2 11a15.1 15.1 0 0 0 3.763 10 3 3 0 0 0 3.648.648 5.5 5.5 0 0 1 5.178 0A3 3 0 0 0 18.237 21" />',
+    heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />',
+    chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />'
+  };
+
+  function icon(name) {
+    if (ICONS[name]) {
+      return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
+    }
+    return W.icon(name);
+  }
+
+  var NEEDS = [['food', 'apple', '#ff9b3d'], ['fun', 'heart', '#ff5f9a'], ['energy', 'zap', '#ffc53d']];
+  var MENU = [['feed', 'Feed', 'apple'], ['play', 'Play', 'gamepad'], ['chat', 'Chat', 'chat'], ['sleep', 'Sleep', 'moon']];
+  var chosen = 0;
+  var note = '';
+  var noteUntil = 0;
+
+  W.$('needs').innerHTML = NEEDS.map(function (n) {
+    return '<div class="need" id="need-' + n[0] + '" style="--c:' + n[2] + '">' + icon(n[1]) + '<i><b></b></i></div>';
+  }).join('');
+  W.$('needs').style.display = cfg.needs === 'off' ? 'none' : '';
+  W.$('menu').innerHTML = MENU.map(function (m) {
+    return '<button data-a="' + m[0] + '">' + icon(m[2]) + '<span>' + m[1] + '</span></button>';
+  }).join('');
+
+  function say(text) {
+    note = text;
+    noteUntil = clock + 2.6;
+  }
+
+  function busy() {
+    return seq && (seqName === 'eat' || seqName === 'sleep' || seqName === 'refuse');
+  }
+
+  function act(a) {
+    if (!rig) {
+      return;
+    }
+    if (pet.sleeping) {
+      if (a === 'sleep') {
+        wake(true);
+      } else {
+        say('Shh, sleeping');
+      }
+      return;
+    }
+    if (busy() && a !== 'sleep') {
+      return;
+    }
+    if (a === 'feed') {
+      if (cfg.needs !== 'off' && pet.food > 88) {
+        say('Not hungry');
+        play('refuse');
+      } else {
+        play('eat');
+      }
+    } else if (a === 'play') {
+      if (cfg.needs !== 'off' && pet.energy < 15) {
+        say('Too tired to play');
+        play('refuse');
+      } else {
+        var games = ['dance', 'robotDance', 'jump', 'run', 'roll', 'wave'];
+        play(games[Math.floor(Math.random() * games.length)]);
+        bump('fun', 22);
+        bump('energy', -6);
+        bump('food', -3);
+        hearts(1);
+      }
+    } else if (a === 'chat') {
+      play('talk');
+      bump('fun', 12);
+      hearts(1);
+    } else if (a === 'sleep') {
+      sleepNow(false);
+    }
+    save();
+  }
+
+  var lastPet = 0;
+
+  function petIt() {
+    if (!rig || pet.sleeping || busy() || clock - lastPet < 2) {
+      return;
+    }
+    lastPet = clock;
+    bump('fun', 5);
+    play('pet');
+    save();
+  }
+
+  function updateUI() {
+    NEEDS.forEach(function (n) {
+      var el = W.$('need-' + n[0]);
+      el.querySelector('b').style.width = Math.round(pet[n[0]]) + '%';
+      el.classList.toggle('low', pet[n[0]] < 25);
+    });
+    var buttons = W.$('menu').querySelectorAll('button');
+    buttons.forEach(function (b, i) {
+      b.classList.toggle('sel', i === chosen);
+    });
+    buttons[3].querySelector('span').textContent = pet.sleeping ? 'Wake up' : 'Sleep';
+    var who = mii ? mii.name : 'Mii';
+    W.$('status').textContent = who + ' · ' + (clock < noteUntil ? note : MOODS[mood()][0]);
+  }
+
+  // ---------- Frame loop ----------
+  var clock = 0;
+  var last = 0;
+  var nextAction = 3;
+  var nextBlink = 3;
+  var nextZ = 0;
+  var nextMouth = 0;
+  var nextSave = 5;
+  var nextUI = 0;
+  var mouthOpen = false;
+  var blinking = false;
+  var nightK = 0;
+  var tmp = new V();
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (document.visibilityState !== 'visible' || !rig) {
+      last = now;
+      return;
+    }
+    var dt = Math.min(0.1, (now - (last || now)) / 1000);
+    last = now;
+    clock += dt;
+
+    // Needs: up to date every second, saved every few seconds. Bedtime and waking up on its own.
+    if (clock >= nextUI) {
+      age();
+      if (pace() > 0) {
+        var tired = pet.energy < 12 || (night() && pet.energy < 70 && clock > noAutoSleepUntil);
+        if (!pet.sleeping && tired && !busy()) {
+          sleepNow(false);
+        } else if (pet.sleeping && pet.energy >= 100 && !night()) {
+          wake(false);
+        }
+      }
+      updateUI();
+      nextUI = clock + 1;
+    }
+    if (clock >= nextSave) {
+      save();
+      nextSave = clock + 10;
+    }
+
+    // Next step, next movement.
+    if (seq && clock >= stepEnd) {
+      stepIndex++;
+      if (stepIndex < seq.length) {
+        startStep();
+      } else {
+        finish();
+      }
+    }
+    if (!seq && cfg.motion !== 'still' && clock >= nextAction && !manual() && !pet.sleeping) {
+      var pool = POOLS[mood()] || POOLS.fine;
+      if (cfg.motion === 'calm') {
+        pool = pool.filter(function (m) {
+          return CALM.indexOf(m) >= 0;
+        });
+      }
+      play(pool[Math.floor(Math.random() * pool.length)] || 'walk');
+    }
+    var st = seq ? seq[stepIndex] : {};
+    var t = clock - stepStart;
+    mixer.update(dt);
+    if (st.eat) {
+      eatStep(t);
+    }
+
+    // Across the floor: walking and running turn back at the edges, a roll just stops there.
+    var lim = limitX();
+    var turn = 0;
+    if (st.move) {
+      walkX += walkDir * st.move * dt;
+      if (Math.abs(walkX) > lim) {
+        walkX = Math.sign(walkX) * lim;
+        if (!st.stop) {
+          walkDir = -walkDir;
+        }
+      }
+      turn = walkDir * Math.PI / 2 * 0.85;
+    } else if (st.turn) {
+      turn = turnDir * st.turn;
+    }
+    // Lying on its back: move over so the whole body stays in view.
+    if (st.nap) {
+      var back = -Math.sin(turnDir * st.turn);
+      walkX += (-back * 85 * rig.sy - walkX) * (1 - Math.exp(-dt * 2));
+    }
+    facing += (turn - facing) * (1 - Math.exp(-dt * 6));
+    rig.root.position.x = walkX;
+    rig.root.rotation.y = facing;
+
+    // The stool comes out and goes away.
+    stoolK += ((st.stool ? 1 : 0) - stoolK) * (1 - Math.exp(-dt * 10));
+    rig.stool.visible = stoolK > 0.02;
+    rig.stool.scale.setScalar(Math.max(0.001, stoolK));
+
+    // Shadow under the hips, smaller when they are up in the air.
+    rig.bones.hips.getWorldPosition(tmp);
+    rig.shadow.position.x = tmp.x;
+    rig.shadow.position.z = tmp.z;
+    var up = Math.max(0, tmp.y - 56 * rig.sy);
+    rig.shadow.scale.setScalar(Math.max(0.5, 1 - up / 90) * (st.nap ? 1.6 : 1));
+
+    // Lights down while asleep.
+    nightK += ((pet.sleeping ? 1 : 0) - nightK) * (1 - Math.exp(-dt * 1.5));
+    sky.intensity = 0.85 - 0.45 * nightK;
+    sun.intensity = 0.75 - 0.55 * nightK;
+    W.$('night').style.opacity = (0.45 * nightK).toFixed(3);
+
+    // The face: the step's expression (or the mood's), with the mouth moving while talking.
+    var want = seq ? stepFace(st, t) : moodFace();
+    if (want !== expr) {
+      showExpression(want);
+    }
+    if (st.talk && clock >= nextMouth && heads.smile_open_mouth && heads[expr]) {
+      mouthOpen = !mouthOpen;
+      setHead(mouthOpen ? 'smile_open_mouth' : expr);
+      nextMouth = clock + 0.12 + Math.random() * 0.16;
+    } else if (!st.talk && mouthOpen) {
+      mouthOpen = false;
+      setHead(expr);
+    }
+
+    // Blink now and then (not with the eyes closed or while talking); sleepy Miis blink more.
+    if (cfg.blink && expr !== 'blink' && !st.talk && clock >= nextBlink && heads.blink) {
+      blink();
+      nextBlink = clock + (mood() === 'sleepy' ? 1.2 : 3) + Math.random() * 3;
+    }
+    if (st.sleep && clock >= nextZ) {
+      zzz();
+      nextZ = clock + 1.2;
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  function blink() {
+    if (blinking) {
+      return;
+    }
+    blinking = true;
+    setHead('blink');
+    setTimeout(function () {
+      blinking = false;
+      if (heads[expr]) {
+        setHead(expr);
+      }
+    }, 130);
+  }
+
+  // A floating letter or heart, from above the head.
+  function float(cls, text, dx) {
+    var el = document.createElement('div');
+    el.className = cls;
+    el.textContent = text;
+    var v = new V();
+    rig.head.getWorldPosition(v);
+    v.y += 75;
+    v.x += dx || 0;
+    v.project(camera);
+    el.style.left = ((v.x + 1) / 2 * canvas.clientWidth) + 'px';
+    el.style.top = ((1 - v.y) / 2 * canvas.clientHeight) + 'px';
+    W.$('root').appendChild(el);
+    setTimeout(function () {
+      el.remove();
+    }, 2500);
+  }
+
+  function zzz() {
+    float('zzz', 'z');
+  }
+
+  function hearts(n) {
+    for (var i = 0; i < n; i++) {
+      setTimeout(function () {
+        if (rig) {
+          float('heart', '♥', (Math.random() - 0.5) * 50);
+        }
+      }, i * 220);
+    }
+  }
+
+  // Half the floor width the camera sees, minus some margin.
+  function limitX() {
+    var dist = camera.position.z;
+    var halfH = Math.tan(camera.fov * Math.PI / 360) * dist;
+    return Math.max(0, halfH * camera.aspect - 60);
+  }
+
+  function resize() {
+    var w = canvas.clientWidth;
+    var h = canvas.clientHeight;
+    if (!w || !h) {
+      return;
+    }
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    // Fit the whole Mii (about 200 units tall: body 130, head 70) with room for the bars and the name
+    // (the menu in the focused view).
+    var focused = Input.isFocusedView();
+    var tall = focused ? 270 : 262;
+    var dist = tall / 2 / Math.tan(camera.fov * Math.PI / 360);
+    camera.position.set(0, 110, dist);
+    camera.lookAt(0, focused ? 88 : 94, 0);
+    camera.updateProjectionMatrix();
+    walkX = Math.max(-limitX(), Math.min(limitX(), walkX));
+  }
+
+  window.addEventListener('resize', resize);
+
+  // ---------- Controls (focused view) ----------
+  var manualUntil = 0;
+
+  function manual() {
+    return Date.now() < manualUntil;
+  }
+
+  Input.on(function (a) {
+    if (!rig || !Input.isFocusedView()) {
+      return;
+    }
+    manualUntil = Date.now() + 15000;
+    if (a.type === 'dir' && (a.dir === 'left' || a.dir === 'right')) {
+      chosen = (chosen + (a.dir === 'left' ? -1 : 1) + MENU.length) % MENU.length;
+    } else if (a.type === 'a' && a.x !== undefined) {
+      // A tap: on a button does it, anywhere else pets the Mii.
+      var el = document.elementFromPoint(a.x, a.y);
+      var b = el && el.closest('button[data-a]');
+      if (b) {
+        chosen = MENU.map(function (m) { return m[0]; }).indexOf(b.getAttribute('data-a'));
+        act(b.getAttribute('data-a'));
+      } else {
+        petIt();
+      }
+    } else if (a.type === 'a' || a.type === 'start') {
+      act(MENU[chosen][0]);
+    }
+    updateUI();
+  });
+
+  // ---------- Lookup and start ----------
+  function start() {
+    message('');
+    info = decode(mii.data);
+    W.$('name').textContent = cfg.showName ? mii.name : '';
+    buildBody();
+    resize();
+    showExpression(moodFace());
+    preloadFaces(0);
+    updateUI();
+  }
+
+  function lookup() {
+    if (!cfg.nnid) {
+      // No ID yet: the default Mii.
+      W.$('name').textContent = cfg.showName ? 'Mii' : '';
+      buildBody();
+      resize();
+      updateUI();
+      return;
+    }
+    var key = 'mii:' + cfg.network + ':' + cfg.nnid.toLowerCase();
+    var saved = W.store.get(key);
+    if (saved) {
+      mii = saved;
+      start();
+      if (W.store.get(key, 24 * 3600 * 1000)) {
+        return;
+      }
+    }
+    fetch(API + '/mii_data/' + encodeURIComponent(cfg.nnid) + (cfg.network === 'pnid' ? '?api_id=1' : '')).then(function (r) {
+      if (r.status === 404) {
+        throw new Error('not found');
+      }
+      if (!r.ok) {
+        throw new Error('HTTP ' + r.status);
+      }
+      return r.json();
+    }).then(function (j) {
+      var fresh = { data: j.data, name: j.name || cfg.nnid };
+      W.store.set(key, fresh);
+      if (!mii || mii.data !== fresh.data) {
+        mii = fresh;
+        heads = { default: heads.default };
+        headLoading = {};
+        shownHead = null;
+        start();
+      }
+    }).catch(function (e) {
+      W.log('mii3d lookup', String(e));
+      if (!mii) {
+        message(String(e.message) === 'not found' ? 'No Mii found for ' + cfg.nnid : 'Could not reach the Mii renderer');
+      }
+    });
+  }
+
+  message('');
+  lookup();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

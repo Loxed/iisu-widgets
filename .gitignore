@@ -1,3 +1,6 @@
 # Your own music and the packs built from it (not for the public repo)
 hourly music/
 music-pack-*.html
+
+# Source animation packs (62 MB): the widget uses the baked widgets/shared/mii-anims.js
+models/animations/

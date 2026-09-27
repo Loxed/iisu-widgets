@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mii animation builder</title>
+<style>
+  body {
+    margin: 0;
+    background: #101017;
+    color: #e8e8f0;
+    font: 14px system-ui, sans-serif;
+  }
+
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 14px;
+  }
+
+  select, button {
+    font: inherit;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #333;
+    background: #1c1c26;
+    color: inherit;
+  }
+
+  #view {
+    display: block;
+    width: 100%;
+    height: 70vh;
+  }
+
+  #log {
+    padding: 10px 14px;
+    color: #9a9ab0;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+<!--
+  Retargets the animations in models/animations/ onto the Mii body skeleton (widgets/shared/mii-rig.js)
+  and writes widgets/shared/mii-anims.js, which the Mii 3D widget plays.
+  Open it from a local web server at the repository root (for example "python -m http.server"), then
+  http://localhost:8000/tools/mii-anim-build.html. Left: the source animation; right: the Mii.
+  "Download mii-anims.js" saves the file to put in widgets/shared/.
+  The list of moves is CLIPS below: widget name, source, animation name, loop.
+-->
+<header>
+  <select id="clip"></select>
+  <button id="play">Play</button>
+  <button id="dl">Download mii-anims.js</button>
+</header>
+<canvas id="view"></canvas>
+<div id="log">Loading...</div>
+
+<script src="../widgets/vendor/three/three.min.js"></script>
+<script src="../widgets/vendor/three/GLTFLoader.js"></script>
+<script src="../widgets/shared/mii-body.js"></script>
+<script src="../widgets/shared/mii-rig.js"></script>
+<script>
+// Sources: the file and which of its bones play each part of the Mii. Arms: upper arm, forearm, hand.
+// Legs: thigh, shin, foot. Left and right are told apart by position, so either side's names work.
+var SOURCES = {
+  ual: {
+    file: '../models/animations/Universal Animation Library[Standard]/Unreal-Godot/UAL1_Standard.glb',
+    credit: 'Universal Animation Library by Quaternius (CC0)',
+    pelvis: 'pelvis', chest: 'spine_03', head: 'Head',
+    arms: [['upperarm_l', 'lowerarm_l', 'hand_l'], ['upperarm_r', 'lowerarm_r', 'hand_r']],
+    legs: [['thigh_l', 'calf_l', 'foot_l'], ['thigh_r', 'calf_r', 'foot_r']]
+  },
+  robot: {
+    file: '../models/animations/RobotExpressive.glb',
+    credit: 'RobotExpressive by Tomás Laulhé (CC0)',
+    pelvis: 'Hips', chest: 'Torso', head: 'Head',
+    arms: [['UpperArm.L', 'LowerArm.L', 'Palm2.L'], ['UpperArm.R', 'LowerArm.R', 'Palm2.R']],
+    legs: [['UpperLeg.L', 'LowerLeg.L', 'Foot.L'], ['UpperLeg.R', 'LowerLeg.R', 'Foot.R']]
+  }
+};
+
+// The moves written to mii-anims.js: [name used by the widget, source, animation, loop].
+var CLIPS = [
+  ['idle', 'ual', 'Idle_Loop', true],
+  ['talk', 'ual', 'Idle_Talking_Loop', true],
+  ['walk', 'ual', 'Walk_Loop', true],
+  ['run', 'ual', 'Jog_Fwd_Loop', true],
+  ['dance', 'ual', 'Dance_Loop', true],
+  ['robotDance', 'robot', 'Dance', true],
+  ['wave', 'robot', 'Wave', false],
+  ['jump', 'robot', 'Jump', false],
+  ['yes', 'robot', 'Yes', false],
+  ['no', 'robot', 'No', false],
+  ['thumbsUp', 'robot', 'ThumbsUp', false],
+  ['sitDown', 'ual', 'Sitting_Enter', false],
+  ['sit', 'ual', 'Sitting_Idle_Loop', true],
+  ['standUp', 'ual', 'Sitting_Exit', false],
+  ['fall', 'ual', 'Death01', false],
+  ['roll', 'ual', 'Roll', false]
+];
+
+var FPS = 30;
+var OUT_BONES = ['hips', 'spine', 'neck', 'armL', 'foreL', 'armR', 'foreR', 'thighL', 'kneeL', 'footL', 'thighR', 'kneeR', 'footR'];
+var V = THREE.Vector3;
+var Q = THREE.Quaternion;
+var UP = new V(0, 1, 0);
+
+function log(t) {
+  document.getElementById('log').textContent = t;
+}
+
+// ---------- Sources ----------
+function loadSource(key) {
+  var s = SOURCES[key];
+  return new Promise(function (resolve, reject) {
+    new THREE.GLTFLoader().load(s.file, function (gltf) {
+      // Bones by name (a bone wins over a mesh of the same name).
+      var bones = {};
+      gltf.scene.traverse(function (o) {
+        if (o.isBone || !bones[o.name]) {
+          bones[o.name] = bones[o.name] && bones[o.name].isBone ? bones[o.name] : o;
+        }
+      });
+      s.scene = gltf.scene;
+      s.anims = gltf.animations;
+      s.bones = bones;
+      s.mixer = new THREE.AnimationMixer(gltf.scene);
+      gltf.scene.updateMatrixWorld(true);
+      s.rest = snapshot(s);
+      // Facing: from the character's left shoulder to its right, crossed with up.
+      var a = s.rest.pos[s.arms[0][0]];
+      var b = s.rest.pos[s.arms[1][0]];
+      var fwd = new V().subVectors(a, b).cross(UP);
+      fwd.y = 0;
+      fwd.normalize();
+      // arms[0] is the character's left if the forward vector made from it points out of the chest.
+      s.fix = new Q().setFromUnitVectors(fwd, new V(0, 0, 1));
+      var feet = Math.min(s.rest.pos[s.legs[0][2]].y, s.rest.pos[s.legs[1][2]].y);
+      s.hipH = s.rest.pos[s.pelvis].y - feet;
+      s.scale = 56 / s.hipH;
+      resolve(s);
+    }, undefined, reject);
+  });
+}
+
+function names(s) {
+  var list = [s.pelvis, s.chest, s.head];
+  s.arms.concat(s.legs).forEach(function (l) {
+    list = list.concat(l);
+  });
+  return list;
+}
+
+function snapshot(s) {
+  var pos = {};
+  var rot = {};
+  // In the source file's own space (the preview puts it in a scaled, turned holder).
+  var inv = s.holder ? s.holder.matrixWorld.clone().invert() : new THREE.Matrix4();
+  var invQ = s.holder ? s.holder.getWorldQuaternion(new Q()).invert() : new Q();
+  names(s).forEach(function (n) {
+    // three.js drops dots and spaces from node names ("UpperArm.L" becomes "UpperArmL").
+    var b = s.bones[n] || s.bones[THREE.PropertyBinding.sanitizeNodeName(n)];
+    if (!b) {
+      throw new Error('bone not found: ' + n);
+    }
+    pos[n] = b.getWorldPosition(new V()).applyMatrix4(inv);
+    rot[n] = invQ.clone().multiply(b.getWorldQuaternion(new Q()));
+  });
+  return { pos: pos, rot: rot };
+}
+
+// ---------- Retargeting ----------
+// Limbs copy the directions of the source's segments (so different proportions and rest poses do not
+// matter), with the elbow or knee bending in the plane the source bends in. Pelvis, chest, head and
+// feet copy the source's turn away from its rest pose.
+function basis(axis, hint) {
+  var a = axis.clone().normalize();
+  var h = hint.clone().sub(a.clone().multiplyScalar(hint.dot(a))).normalize();
+  var n = new V().crossVectors(a, h);
+  return new THREE.Matrix4().makeBasis(a, h, n);
+}
+
+function fromTo(restAxis, restHint, axis, hint) {
+  var m0 = basis(restAxis, restHint);
+  var m1 = basis(axis, hint);
+  return new Q().setFromRotationMatrix(m1.multiply(m0.transpose()));
+}
+
+function delta(s, snap, n) {
+  // World turn from rest, expressed in the Mii's frame (facing +z).
+  var d = snap.rot[n].clone().multiply(s.rest.rot[n].clone().invert());
+  return s.fix.clone().multiply(d).multiply(s.fix.clone().invert());
+}
+
+function dir(s, snap, a, b) {
+  return new V().subVectors(snap.pos[b], snap.pos[a]).applyQuaternion(s.fix).normalize();
+}
+
+function retargetFrame(s, snap, state) {
+  var W = {};
+  W.hips = delta(s, snap, s.pelvis);
+  W.spine = delta(s, snap, s.chest);
+  W.neck = delta(s, snap, s.head);
+  // Source side 0 is the character's left, which is +x when it faces +z: the Mii's "R" bones.
+  [['R', 0], ['L', 1]].forEach(function (p) {
+    var side = p[0];
+    var sx = side === 'R' ? 1 : -1;
+    var arm = s.arms[p[1]];
+    var leg = s.legs[p[1]];
+    limb(W, state, 'arm' + side, 'fore' + side, new V(sx, 0, 0), new V(0, 0, 1), dir(s, snap, arm[0], arm[1]), dir(s, snap, arm[1], arm[2]));
+    limb(W, state, 'thigh' + side, 'knee' + side, new V(0, -1, 0), new V(0, 0, -1), dir(s, snap, leg[0], leg[1]), dir(s, snap, leg[1], leg[2]));
+    W['foot' + side] = delta(s, snap, leg[2]);
+  });
+  // Local rotations from world ones.
+  var parent = { hips: null, spine: 'hips', neck: 'spine', armL: 'spine', foreL: 'armL', armR: 'spine', foreR: 'armR', thighL: 'hips', kneeL: 'thighL', footL: 'kneeL', thighR: 'hips', kneeR: 'thighR', footR: 'kneeR' };
+  var L = {};
+  OUT_BONES.forEach(function (b) {
+    L[b] = parent[b] ? W[parent[b]].clone().invert().multiply(W[b]) : W[b].clone();
+  });
+  var hp = new V().subVectors(snap.pos[s.pelvis], s.rest.pos[s.pelvis]).applyQuaternion(s.fix).multiplyScalar(s.scale);
+  hp.y += 56;
+  return { hips: hp, q: L };
+}
+
+function limb(W, state, upper, lower, restAxis, restHint, u, f) {
+  // The bend direction: where the lower segment goes, away from the upper one's line.
+  var h = f.clone().sub(u.clone().multiplyScalar(f.dot(u)));
+  if (h.length() < 0.12) {
+    // Nearly straight: keep the previous bend direction (or the rest one) to avoid flips.
+    h = (state[upper] || restHint.clone().applyQuaternion(new Q().setFromUnitVectors(restAxis, u))).clone();
+    h.sub(u.clone().multiplyScalar(h.dot(u)));
+  }
+  h.normalize();
+  state[upper] = h.clone();
+  W[upper] = fromTo(restAxis, restHint, u, h);
+  // The lower segment bends around the same axis, so the joint does not twist.
+  var n = new V().crossVectors(u, h);
+  var h2 = new V().crossVectors(n, f);
+  W[lower] = fromTo(restAxis, restHint, f, h2);
+}
+
+function retarget(key, animName) {
+  var s = SOURCES[key];
+  var clip = s.anims.filter(function (a) {
+    return a.name === animName;
+  })[0];
+  if (!clip) {
+    throw new Error(key + ': no animation ' + animName);
+  }
+  s.mixer.stopAllAction();
+  var action = s.mixer.clipAction(clip);
+  action.reset().play();
+  var n = Math.max(2, Math.round(clip.duration * FPS) + 1);
+  var frames = [];
+  var state = {};
+  for (var i = 0; i < n; i++) {
+    s.mixer.setTime(Math.min(clip.duration, i / FPS));
+    (s.holder || s.scene).updateMatrixWorld(true);
+    frames.push(retargetFrame(s, snapshot(s), state));
+  }
+  action.stop();
+  // Keep quaternion signs continuous so the interpolation takes the short way.
+  for (i = 1; i < n; i++) {
+    OUT_BONES.forEach(function (b) {
+      if (frames[i].q[b].dot(frames[i - 1].q[b]) < 0) {
+        var q = frames[i].q[b];
+        q.set(-q.x, -q.y, -q.z, -q.w);
+      }
+    });
+  }
+  return { frames: frames, duration: clip.duration };
+}
+
+function encode(frames) {
+  var stride = 3 + OUT_BONES.length * 4;
+  var d = new Int16Array(frames.length * stride);
+  frames.forEach(function (fr, i) {
+    var o = i * stride;
+    d[o] = Math.round(fr.hips.x * 10);
+    d[o + 1] = Math.round(fr.hips.y * 10);
+    d[o + 2] = Math.round(fr.hips.z * 10);
+    OUT_BONES.forEach(function (b, j) {
+      var q = fr.q[b];
+      d[o + 3 + j * 4] = Math.round(q.x * 32767);
+      d[o + 4 + j * 4] = Math.round(q.y * 32767);
+      d[o + 5 + j * 4] = Math.round(q.z * 32767);
+      d[o + 6 + j * 4] = Math.round(q.w * 32767);
+    });
+  });
+  var bytes = new Uint8Array(d.buffer);
+  var bin = '';
+  for (var i = 0; i < bytes.length; i += 8192) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+  }
+  return btoa(bin);
+}
+
+function buildJS() {
+  var clips = {};
+  var credits = {};
+  CLIPS.forEach(function (c) {
+    var r = retarget(c[1], c[2]);
+    clips[c[0]] = { src: c[1] + ':' + c[2], loop: !!c[3], data: encode(r.frames) };
+    credits[SOURCES[c[1]].credit] = true;
+  });
+  return '// Generated by tools/mii-anim-build.html from models/animations/. Do not edit by hand.\n' +
+    '// ' + Object.keys(credits).join(', ') + '.\n' +
+    'window.MII_ANIMS = ' + JSON.stringify({ fps: FPS, bones: OUT_BONES, clips: clips }) + ';\n';
+}
+
+// ---------- Preview ----------
+var canvas = document.getElementById('view');
+var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.setClearColor(0x2a2a35);
+var scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a93a6, 0.9));
+var sun = new THREE.DirectionalLight(0xffffff, 0.7);
+sun.position.set(60, 140, 160);
+scene.add(sun);
+var camera = new THREE.PerspectiveCamera(30, 2, 10, 4000);
+var grid = new THREE.GridHelper(600, 12, 0x555566, 0x3a3a48);
+scene.add(grid);
+
+var mii = MiiRig.body(THREE, {
+  shirt: new THREE.MeshLambertMaterial({ color: 0x2255cc }),
+  pants: new THREE.MeshLambertMaterial({ color: 0x333a48 }),
+  shoes: new THREE.MeshLambertMaterial({ color: 0x555560 })
+});
+mii.group.position.x = 90;
+scene.add(mii.group);
+var head = new THREE.Mesh(new THREE.SphereGeometry(30, 24, 16), new THREE.MeshLambertMaterial({ color: 0xffd3ad }));
+head.position.y = 25;
+var nose = new THREE.Mesh(new THREE.SphereGeometry(5, 12, 8), new THREE.MeshLambertMaterial({ color: 0xe0a080 }));
+nose.position.set(0, 25, 30);
+mii.bones.neck.add(head, nose);
+
+var current = null;
+var shownSource = null;
+
+function applyFrame(fr) {
+  mii.bones.hips.position.copy(fr.hips);
+  OUT_BONES.forEach(function (b) {
+    mii.bones[b].quaternion.copy(fr.q[b]);
+  });
+}
+
+function show(key, animName, t) {
+  var s = SOURCES[key];
+  if (shownSource !== s) {
+    if (shownSource) {
+      scene.remove(shownSource.holder);
+    }
+    if (!s.holder) {
+      s.holder = new THREE.Group();
+      s.holder.add(s.scene);
+      s.holder.scale.setScalar(s.scale);
+      s.holder.quaternion.copy(s.fix);
+      s.holder.position.x = -90;
+    }
+    scene.add(s.holder);
+    shownSource = s;
+  }
+  if (!current || current.key !== key || current.anim !== animName) {
+    current = { key: key, anim: animName, r: retarget(key, animName) };
+    var clip = s.anims.filter(function (a) {
+      return a.name === animName;
+    })[0];
+    s.mixer.stopAllAction();
+    current.action = s.mixer.clipAction(clip);
+    current.action.play();
+  }
+  var d = current.r.duration;
+  var tt = d > 0 ? t % d : 0;
+  s.mixer.setTime(tt);
+  var fr = current.r.frames[Math.min(current.r.frames.length - 1, Math.round(tt * FPS))];
+  applyFrame(fr);
+  resize();
+  renderer.render(scene, camera);
+}
+
+function resize() {
+  var w = canvas.clientWidth;
+  var h = canvas.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  var tall = 260;
+  var dist = tall / 2 / Math.tan(camera.fov * Math.PI / 360);
+  var yaw = window.YAW || 0;
+  camera.position.set(Math.sin(yaw) * dist, 110, Math.cos(yaw) * dist);
+  camera.lookAt(0, 90, 0);
+  camera.updateProjectionMatrix();
+}
+
+var sel = document.getElementById('clip');
+var playing = false;
+var t0 = 0;
+
+function loop(now) {
+  if (playing) {
+    var v = sel.value.split('|');
+    show(v[0], v[1], (now - t0) / 1000);
+    requestAnimationFrame(loop);
+  }
+}
+
+document.getElementById('play').onclick = function () {
+  playing = !playing;
+  t0 = performance.now();
+  requestAnimationFrame(loop);
+};
+sel.onchange = function () {
+  var v = sel.value.split('|');
+  show(v[0], v[1], 0);
+};
+document.getElementById('dl').onclick = function () {
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([buildJS()], { type: 'text/javascript' }));
+  a.download = 'mii-anims.js';
+  a.click();
+};
+
+window.ready = Promise.all(Object.keys(SOURCES).map(loadSource)).then(function () {
+  Object.keys(SOURCES).forEach(function (k) {
+    SOURCES[k].anims.forEach(function (a) {
+      var o = document.createElement('option');
+      o.value = k + '|' + a.name;
+      o.textContent = k + ': ' + a.name + ' (' + a.duration.toFixed(1) + ' s)';
+      sel.appendChild(o);
+    });
+  });
+  log('Ready. ' + Object.keys(SOURCES).map(function (k) {
+    return k + ': ' + SOURCES[k].anims.length + ' animations';
+  }).join(', '));
+  sel.onchange();
+});
+window.show = show;
+window.buildJS = buildJS;
+</script>
+</body>
+</html>
