@@ -27,6 +27,11 @@
     pointer-events: none;
   }
 
+  /* The texts and bars let touches through to the 3D view (camera drag). */
+  #name, #needs, #status, #msg {
+    pointer-events: none;
+  }
+
   #name {
     position: absolute;
     left: 0;
@@ -268,6 +273,7 @@
 // closed): feed it, play with it, chat with it, put it to bed. Its mood shows on its face and in what it
 // does on its own. It goes to bed by itself when it is exhausted or late at night.
 // Focused view: left and right choose Feed, Play, Chat or Sleep, A does it; tap the Mii to pet it.
+// Drag, pinch or the right stick and triggers move the camera; it comes back by itself.
 // Without an ID it shows the default Mii.
 (function () {
   var cfg = W.config({
@@ -1225,6 +1231,7 @@
       nextZ = clock + 1.2;
     }
 
+    updateCamera(dt);
     renderer.render(scene, camera);
   }
 
@@ -1276,10 +1283,164 @@
 
   // Half the floor width the camera sees, minus some margin.
   function limitX() {
-    var dist = camera.position.z;
-    var halfH = Math.tan(camera.fov * Math.PI / 360) * dist;
+    var halfH = Math.tan(camera.fov * Math.PI / 360) * base.dist;
     return Math.max(0, halfH * camera.aspect - 60);
   }
+
+  // ---------- Camera ----------
+  // The usual framing faces the Mii. In the focused view, dragging (a finger or the mouse) or the right
+  // stick turns the camera around the Mii and up or down; pinching, the mouse wheel or the triggers
+  // zoom. The camera then follows the Mii. After a few seconds without touching it, it glides back to
+  // the usual framing (right away when the widget goes back to a tile).
+  var base = { dist: 540, camY: 110, lookY: 94 };
+  var aim = { yaw: 0, pitch: 0, zoom: 1 };     // where the user puts the camera
+  var cam = { yaw: 0, pitch: 0, zoom: 1, follow: 0 };
+  var lastCam = -99;
+  var CAM_IDLE = 5;
+
+  function wrap(a) {
+    return Math.atan2(Math.sin(a), Math.cos(a));
+  }
+
+  function moveCam(dyaw, dpitch, zoom) {
+    var elev = Math.atan2(base.camY - base.lookY, base.dist);
+    aim.yaw = wrap(aim.yaw + dyaw);
+    aim.pitch = Math.max(-elev - 0.05, Math.min(1.15 - elev, aim.pitch + dpitch));
+    aim.zoom = Math.max(0.4, Math.min(1.6, aim.zoom * zoom));
+    lastCam = clock;
+  }
+
+  function readStick(dt) {
+    var pads = [];
+    try {
+      pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    } catch (e) {
+      return;
+    }
+    for (var i = 0; i < pads.length; i++) {
+      var p = pads[i];
+      if (!p || p.connected === false) {
+        continue;
+      }
+      var dz = function (v) {
+        return Math.abs(v || 0) < 0.18 ? 0 : v;
+      };
+      var rx = dz(p.axes[2]);
+      var ry = dz(p.axes[3]);
+      var zin = p.buttons[7] ? p.buttons[7].value || (p.buttons[7].pressed ? 1 : 0) : 0;
+      var zout = p.buttons[6] ? p.buttons[6].value || (p.buttons[6].pressed ? 1 : 0) : 0;
+      if (rx || ry || zin > 0.1 || zout > 0.1) {
+        moveCam(-rx * dt * 2.4, -ry * dt * 1.6, Math.exp((zout - zin) * dt * 1.2));
+      }
+      return;
+    }
+  }
+
+  function updateCamera(dt) {
+    var focused = Input.isFocusedView();
+    if (focused && document.visibilityState === 'visible') {
+      readStick(dt);
+    }
+    // Back to the usual framing when left alone.
+    if (!focused || clock - lastCam > CAM_IDLE) {
+      var back = 1 - Math.exp(-dt * (focused ? 1.4 : 8));
+      aim.yaw += (0 - aim.yaw) * back;
+      aim.pitch += (0 - aim.pitch) * back;
+      aim.zoom += (1 - aim.zoom) * back;
+    }
+    var k = 1 - Math.exp(-dt * 10);
+    cam.yaw += wrap(aim.yaw - cam.yaw) * k;
+    cam.pitch += (aim.pitch - cam.pitch) * k;
+    cam.zoom += (aim.zoom - cam.zoom) * k;
+    var moved = Math.abs(aim.yaw) > 0.03 || Math.abs(aim.pitch) > 0.03 || Math.abs(aim.zoom - 1) > 0.03;
+    cam.follow += ((moved ? 1 : 0) - cam.follow) * (1 - Math.exp(-dt * 3));
+
+    // Around the Mii (its hips) once moved, the middle of the floor otherwise; zooming in aims higher,
+    // toward the face.
+    var tx = 0;
+    if (rig) {
+      rig.bones.hips.getWorldPosition(tmp);
+      tx = tmp.x * cam.follow;
+    }
+    var ty = base.lookY + Math.max(0, 1 - cam.zoom) * 75;
+    var dy = base.camY - base.lookY;
+    var d = Math.sqrt(base.dist * base.dist + dy * dy) * cam.zoom;
+    var elev = Math.atan2(dy, base.dist) + cam.pitch;
+    camera.position.set(tx + Math.sin(cam.yaw) * Math.cos(elev) * d, ty + Math.sin(elev) * d, Math.cos(cam.yaw) * Math.cos(elev) * d);
+    camera.lookAt(tx, ty, 0);
+  }
+
+  // Touch and mouse on the 3D view (focused view). Stopping the events here keeps the swipes from also
+  // moving the menu selection; a tap that did not drag pets the Mii.
+  var pointers = {};
+  var drag = null;
+
+  function spread() {
+    var p = Object.keys(pointers).map(function (k) {
+      return pointers[k];
+    });
+    return p.length < 2 ? 0 : Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+  }
+
+  canvas.addEventListener('pointerdown', function (e) {
+    if (!Input.isFocusedView()) {
+      return;
+    }
+    e.stopPropagation();
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch (err) {}
+    drag = drag || { moved: 0, pinched: false };
+    drag.spread = spread();
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    var p = pointers[e.pointerId];
+    if (!p || !drag) {
+      return;
+    }
+    var dx = e.clientX - p.x;
+    var dy = e.clientY - p.y;
+    p.x = e.clientX;
+    p.y = e.clientY;
+    if (Object.keys(pointers).length >= 2) {
+      var s = spread();
+      if (drag.spread > 0 && s > 0) {
+        moveCam(0, 0, drag.spread / s);
+      }
+      drag.spread = s;
+      drag.pinched = true;
+    } else {
+      drag.moved += Math.abs(dx) + Math.abs(dy);
+      if (drag.moved > 6) {
+        var scale = 3.2 / Math.max(200, canvas.clientWidth);
+        moveCam(-dx * scale, dy * scale * 0.8, 1);
+      }
+    }
+  });
+  function release(e) {
+    if (!pointers[e.pointerId]) {
+      return;
+    }
+    e.stopPropagation();
+    delete pointers[e.pointerId];
+    drag.spread = spread();
+    if (!Object.keys(pointers).length) {
+      if (drag.moved <= 6 && !drag.pinched && e.type === 'pointerup') {
+        manualUntil = Date.now() + 15000;
+        petIt();
+      }
+      drag = null;
+    }
+  }
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
+  canvas.addEventListener('wheel', function (e) {
+    if (Input.isFocusedView()) {
+      e.preventDefault();
+      moveCam(0, 0, Math.exp(e.deltaY * 0.0012));
+    }
+  }, { passive: false });
 
   function resize() {
     var w = canvas.clientWidth;
@@ -1294,10 +1455,10 @@
     // (the menu in the focused view).
     var focused = Input.isFocusedView();
     var tall = focused ? 270 : 262;
-    var dist = tall / 2 / Math.tan(camera.fov * Math.PI / 360);
-    camera.position.set(0, 110, dist);
-    camera.lookAt(0, focused ? 88 : 94, 0);
+    base.dist = tall / 2 / Math.tan(camera.fov * Math.PI / 360);
+    base.lookY = focused ? 88 : 94;
     camera.updateProjectionMatrix();
+    updateCamera(0);
     walkX = Math.max(-limitX(), Math.min(limitX(), walkX));
   }
 
