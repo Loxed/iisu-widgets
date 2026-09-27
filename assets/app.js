@@ -154,7 +154,7 @@
       id: 'pagemusic',
       group: 'decor',
       name: 'Page music',
-      desc: 'A picture or GIF with its own music loop. iiSU only runs a widget while its page is on screen, so put one on each page to give every page its own music. It fades in when the page shows up and lowers iiSU\'s own music. Tap to play or pause. Smaller files load faster: a 3 minute track in Opus or AAC at 96 kbps is about 2 MB.',
+      desc: 'A picture or GIF with its own music loop. iiSU only runs a widget while its page is on screen, so put one on each page to give every page its own music. It fades in when the page shows up and lowers iiSU\'s own music. Smaller files load faster: a 3 minute track in Opus or AAC at 96 kbps is about 2 MB.',
       options: [
         { key: 'track', label: 'Music', type: 'file', accept: 'audio/*', def: '' },
         { key: 'image', label: 'Picture or GIF', type: 'file', accept: 'image/*', def: '' },
